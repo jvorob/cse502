@@ -290,7 +290,7 @@ uint64_t System::virt_to_phy(const uint64_t virt_addr) {
 
 void System::load_segment(const int fd, const size_t memsz, const size_t filesz, uint64_t virt_addr) {
     if (VM_DEBUG) cout << "Read " << std::dec << filesz << " bytes at " << std::hex << virt_addr << endl;
-    for(size_t i = 0; i < memsz; ++i) virt_to_phy((virt_addr + i) & ~(PAGE_SIZE-1)); // prefault
+    for(size_t i = 0; i < memsz; ++i) virt_to_phy(virt_addr + i); // prefault
     assert(filesz == read(fd, &ram_virt[virt_addr], filesz));
 }
 

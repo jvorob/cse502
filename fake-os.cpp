@@ -67,10 +67,12 @@ extern "C" {
         case 1244/*__NR_arch_specific_syscall*/:
             switch(a0) {
                 case 1/*RISCV_ATOMIC_CMPXCHG*/:
+                    a1 = System::sys->virt_to_phy(a1);
                     if (*(uint32_t*)&System::sys->ram[a1] == a2) *(uint32_t*)&System::sys->ram[a1] = a3;
                     *a0ret = a2;
                     return;
                 case 2/*RISCV_ATOMIC_CMPXCHG64*/:
+                    a1 = System::sys->virt_to_phy(a1);
                     if (*(uint64_t*)&System::sys->ram[a1] == a2) *(uint64_t*)&System::sys->ram[a1] = a3;
                     *a0ret = a2;
                     return;
