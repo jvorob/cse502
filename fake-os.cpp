@@ -36,7 +36,7 @@ extern "C" {
 #define ECALL_MEMGUARD (10*1024)
 
     void do_ecall(long long a7, long long a0, long long a1, long long a2, long long a3, long long a4, long long a5, long long a6, long long* a0ret) {
-        vector<pair<long long, char[ECALL_MEMGUARD]> > memargs;
+        vector<pair<long long, char[ECALL_MEMGUARD+63]> > memargs;
 
         switch(a7) {
 
