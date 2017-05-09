@@ -94,15 +94,15 @@ extern "C" {
             *a0ret = 0;
             return;
 
-#define ECALL_OFFSET(v)                                                 \
-    do {                                                                \
-        memargs.resize(memargs.size()+1);                               \
-        memargs.back().first = v;                                       \
-        for(int i = 0; i < ECALL_MEMGUARD; ++i) {                       \
-            long long srcptr = System::sys->virt_to_phy((v & ~63) + i); \
-            memargs.back().second[i] = System::sys->ram[srcptr];        \
-        }                                                               \
-        v += (long long)System::sys->ram_virt;                          \
+#define ECALL_OFFSET(v)                                                  \
+    do {                                                                 \
+        memargs.resize(memargs.size()+1);                                \
+        memargs.back().first = v;                                        \
+        for(int i = 0; i < ECALL_MEMGUARD; ++i) {                        \
+            long long physptr = System::sys->virt_to_phy((v & ~63) + i); \
+            memargs.back().second[i] = System::sys->ram[physptr];        \
+        }                                                                \
+        v += (long long)System::sys->ram_virt;                           \
     } while(0)
 
         case __NR_open:
@@ -367,7 +367,8 @@ extern "C" {
         }
         for(auto& m : memargs)
             for(int i = 0; i < ECALL_MEMGUARD; ++i) {
-                auto pw = pending_writes.find((m.first & ~63)+i);
+                long long physptr = System::sys->virt_to_phy((m.first & ~63) + i);
+                auto pw = pending_writes.find(physptr);
                 if (pw == pending_writes.end()) continue;
                 System::sys->ram[pw->first] = pw->second;
                 pending_writes.erase(pw);
@@ -394,9 +395,9 @@ extern "C" {
         set<long long> invalidations;
         for(auto& m : memargs)
             for(int i = 0; i < ECALL_MEMGUARD; ++i) {
-                long long srcptr = System::sys->virt_to_phy((m.first & ~63) + i);
-                if (m.second[i] != System::sys->ram[srcptr]) {
-                    if (ECALL_DEBUG) cerr << "Invalidating " << std::dec << i << " on argument " << std::hex << m.first << "/" << System::sys->ram[srcptr] << endl;
+                long long physptr = System::sys->virt_to_phy((m.first & ~63) + i);
+                if (m.second[i] != System::sys->ram[physptr]) {
+                    if (ECALL_DEBUG) cerr << "Invalidating " << std::dec << i << " on argument " << std::hex << m.first << "/" << System::sys->ram[physptr] << endl;
                     invalidations.insert(m.first & ~63);
                 }
             }
