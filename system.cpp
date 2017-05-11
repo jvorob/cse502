@@ -15,6 +15,8 @@
 #include "system.h"
 #include "Vtop.h"
 
+#define STACK_PAGES     (100)
+
 using namespace std;
 
 enum {
@@ -49,7 +51,7 @@ System::System(Vtop* top, unsigned ramsize, const char* ramelf, const int argc, 
     assert(ram_virt != MAP_FAILED);
     top->satp = get_phys_page() << 12;
     top->stackptr = ramsize - 4*MEGA;
-    virt_to_phy(top->stackptr - PAGE_SIZE); // allocate stack page
+    for(int n = 1; n < STACK_PAGES; ++n) virt_to_phy(top->stackptr - PAGE_SIZE*n); // allocate stack pages
 
     uint64_t* argvp = (uint64_t*)(ram+virt_to_phy(top->stackptr));
     argvp[0] = argc;
