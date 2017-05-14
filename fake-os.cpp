@@ -403,8 +403,8 @@ extern "C" {
             for(int i = 0; i < ECALL_MEMGUARD; ++i) {
                 long long physptr = System::sys->virt_to_phy((m.first & ~63) + i);
                 if (m.second[i] != System::sys->ram[physptr]) {
-                    if (ECALL_DEBUG) cerr << "Invalidating " << std::dec << i << " on argument " << std::hex << m.first << "/" << System::sys->ram[physptr] << endl;
-                    invalidations.insert(m.first & ~63);
+                    if (ECALL_DEBUG) cerr << "Invalidating " << std::dec << i << " on argument " << std::hex << physptr << "/" << m.first << "/" << System::sys->ram[physptr] << endl;
+                    invalidations.insert(physptr & ~63);
                 }
             }
         for(auto& i : invalidations)
