@@ -272,7 +272,10 @@ uint64_t System::get_pte(uint64_t base_addr, int vpn, bool isleaf, bool& allocat
 
 uint64_t System::virt_to_phy(const uint64_t virt_addr) {
 
-    if (!use_virtual_memory) return virt_addr;
+    if (!use_virtual_memory) {
+      assert(virt_addr < ramsize);
+      return virt_addr;
+    }
 
     bool allocated;
     uint64_t pt_base_addr = top->satp;
