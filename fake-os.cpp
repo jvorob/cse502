@@ -59,7 +59,8 @@ extern "C" {
             return;
 
         case __NR_munmap:
-            *a0ret = 0; // don't bother unmapping
+        case __NR_mprotect:
+            *a0ret = 0; // assume we succeeded
             return;
 
         case __NR_exit_group:
