@@ -41,7 +41,7 @@ extern "C" {
         switch(a7) {
 
         case __NR_brk:
-            if (ECALL_DEBUG) cerr << "Allocate " << std::dec << a0 << " bytes at 0x" << std::hex << System::sys->ecall_brk << std::dec << endl;
+            if (ECALL_DEBUG) cerr << "Allocate " << std::dec << (a0-System::sys->ecall_brk) << " bytes at 0x" << std::hex << System::sys->ecall_brk << std::dec << endl;
             if ((a0 > System::sys->max_elf_addr) && (a0 < System::sys->ramsize)) {
                 for(long long addr = System::sys->ecall_brk; addr < a0; ++addr) System::sys->virt_to_phy(addr); // prefault
                 System::sys->ecall_brk = a0;
