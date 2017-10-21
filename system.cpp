@@ -273,7 +273,11 @@ uint64_t System::get_pte(uint64_t base_addr, int vpn, bool isleaf, bool& allocat
 uint64_t System::virt_to_phy(const uint64_t virt_addr) {
 
     if (!use_virtual_memory) {
-      assert(virt_addr < ramsize);
+      if (virt_addr >= ramsize) {
+          cerr << "Invalid virt_to_phy, address " << std::hex << virt_addr << " is beyond end of memory at " << ramsize << endl;
+          Verilated::gotFinish(true);
+          return 0; // return fake translation to avoid core dump from bad address on the last cycle
+      }
       return virt_addr;
     }
 
