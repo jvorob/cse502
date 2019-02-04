@@ -12,7 +12,7 @@ OBJECT_FILES=test
 all: $(OBJECT_FILES)
 
 clean:
-	rm -f $(OBJECT_FILES) $(patsubst %,%.s,$(OBJECT_FILES))
+	rm -f $(OBJECT_FILES) $(patsubst %,%.o,$(OBJECT_FILES)) $(patsubst %,%.s,$(OBJECT_FILES))
 
 %: %.c
 	$(CC) $(CFLAGS) -c $<
