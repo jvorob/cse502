@@ -106,7 +106,7 @@ void System::console() {
 void System::tick(int clk) {
 
     if (top->reset && top->bus_reqcyc) {
-        cerr << "Sending a request on RESET. Ignoring..." << endl;
+        cerr << "Received a bus request during RESET.  Ignoring..." << endl;
         return;
     }
 
