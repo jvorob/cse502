@@ -105,18 +105,10 @@ void System::console() {
 
 void System::tick(int clk) {
 
+    if (!clk) return;
+
     if (top->reset && top->bus_reqcyc) {
         cerr << "Received a bus request during RESET.  Ignoring..." << endl;
-        return;
-    }
-
-    if (!clk) {
-        if (top->bus_reqcyc) {
-            // hack: blocks ACK if /any/ memory channel can't accept transaction
-            top->bus_reqack = dramsim->willAcceptTransaction();            
-            // if trnasfer is in progress, can't change mind about willAcceptTransaction()
-            assert(!rx_count || top->bus_reqack); 
-        }
         return;
     }
 
@@ -145,10 +137,12 @@ void System::tick(int clk) {
     }
 
     if (top->bus_reqcyc) {
-        cmd = (top->bus_reqtag >> 8) & 0xf;
+
         if (rx_count) {
             switch(cmd) {
             case MEMORY:
+                // if transfer is in progress, can't change mind about willAcceptTransaction()
+                assert(willAcceptTransaction(xfer_addr));
                 *((uint64_t*)(&ram[xfer_addr + (8-rx_count)*8])) = top->bus_req;
                 break;
             case MMIO:
@@ -171,6 +165,8 @@ void System::tick(int clk) {
             return;
         }
 
+        cmd = (top->bus_reqtag >> 8) & 0xf;
+
         bool isWrite = ((top->bus_reqtag >> 12) & 1) == WRITE;
         if (cmd == MEMORY && isWrite)
             rx_count = 8;
@@ -182,11 +178,15 @@ void System::tick(int clk) {
         switch(cmd) {
         case MEMORY:
             xfer_addr = top->bus_req & ~0x3fULL;
+            if (!willAcceptTransaction(xfer_addr)) break;
+
+            top->bus_reqack = 1;
+
             if (xfer_addr > (ramsize - 64)) {
                 cerr << "Invalid 64-byte access, address " << std::hex << xfer_addr << " is beyond end of memory at " << ramsize << endl;
                 Verilated::gotFinish(true);
             } else if (addr_to_tag.find(xfer_addr)!=addr_to_tag.end()) {
-                cerr << "Access for " << std::hex << xfer_addr << " already outstanding. Ignoring..." << endl;
+                cerr << "Access for " << std::hex << xfer_addr << " already outstanding.  Ignoring..." << endl;
             } else {
                 assert(
                         dramsim->addTransaction(isWrite, xfer_addr)
@@ -195,13 +195,11 @@ void System::tick(int clk) {
                 if (!isWrite) addr_to_tag[xfer_addr] = make_pair(top->bus_req, top->bus_reqtag);
             }
             break;
-
         case MMIO:
             xfer_addr = top->bus_req;
             assert(!(xfer_addr & 7));
             if (!isWrite) tx_queue.push_back(make_pair(*((uint64_t*)(&ram[xfer_addr])),top->bus_reqtag)); // hack - real I/O takes time
             break;
-
         default:
             cerr << "Unknown command" << std::hex << cmd << endl;
             Verilated::gotFinish(true);

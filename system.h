@@ -54,6 +54,10 @@ class System {
     void load_segment(const int fd, const size_t memsz, const size_t filesz, uint64_t virt_addr);
 
     DRAMSim::MultiChannelMemorySystem* dramsim;
+    bool willAcceptTransaction(uint64_t addr) {
+      // hack: false if /any/ memory channel can't accept transaction
+      return dramsim->willAcceptTransaction();
+    }
     
 public:
     static System* sys;

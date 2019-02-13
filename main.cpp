@@ -66,15 +66,16 @@ int main(int argc, char* argv[]) {
 		top.clk = !top.clk;                \
 		top.eval();                        \
 		TFP_DUMP                           \
-		sys.ticks += sys.ps_per_clock/4;   \
 		sys.tick(top.clk);                 \
 		top.eval();                        \
 		TFP_DUMP                           \
-		sys.ticks += sys.ps_per_clock/4;   \
+		sys.ticks += sys.ps_per_clock/2;   \
 	} while(0)
 
 	top.reset = 1;
 	top.clk = 0;
+	TICK(); // 1
+	TICK(); // 0
 	TICK(); // 1
 	TICK(); // 0
 	TICK(); // 1
