@@ -27,7 +27,7 @@ module top
 
   logic [63:0] pc;
 
-  always @ (posedge clk)
+  always_ff @ (posedge clk)
     if (reset) begin
       pc <= entry;
     end else begin

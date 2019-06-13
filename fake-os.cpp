@@ -10,6 +10,7 @@ using namespace std;
 extern "C" {
 
 #define MAX_PENDING_WRITES 1000000
+#define DEBUG_WRITES 0
 
     map<long long, char> pending_writes;
 
@@ -19,15 +20,22 @@ extern "C" {
     }
 
     void do_pending_write(long long addr, long long val, int size) {
+        if (size > 8) {
+          cerr << "do_pending_write() size should be in number of bytes and cannot exceed 8" << endl;
+          Verilated::gotFinish(true);
+          return;
+        }
         if (pending_writes.size() > MAX_PENDING_WRITES) {
             for(int i = 0; i < MAX_PENDING_WRITES/10; ++i) {
                 auto pw = pending_writes.begin();
+                if (DEBUG_WRITES) cerr << "(Overflow) Merging in pending write for address 0x" << std::hex << pw->first << " value 0x" << (int)((char)(pw->second)) << std::endl;
                 System::sys->ram[pw->first] = pw->second;
                 pending_writes.erase(pw);
             }
         }
         for(int ofs = 0; ofs < size; ++ofs) {
             pending_writes[addr+ofs] = (char)val;
+            if (DEBUG_WRITES) cerr << "Received pending write for address 0x" << std::hex << (addr+ofs) << " value 0x" << (int)(val) << std::endl;
             val >>= 8;
         }
     }
@@ -377,6 +385,7 @@ extern "C" {
                 long long physptr = System::sys->virt_to_phy((m.first & ~63) + i);
                 auto pw = pending_writes.find(physptr);
                 if (pw == pending_writes.end()) continue;
+                if (DEBUG_WRITES) cerr << "Merging in pending write for address 0x" << std::hex << pw->first << " value 0x" << (int)(pw->second) << std::endl;
                 System::sys->ram[pw->first] = pw->second;
                 pending_writes.erase(pw);
             }
