@@ -3,6 +3,7 @@
 
 #include <map>
 #include <list>
+#include <set>
 #include <queue>
 #include <utility>
 #include <bitset>
@@ -38,9 +39,11 @@ class System {
 
     uint64_t load_elf(const char* filename);
 
-    list<pair<uint64_t, int> > tx_queue;
-    int cmd, rx_count;
-    uint64_t xfer_addr;
+    list<pair<uint64_t, int> > r_queue;
+    list<int> resp_queue;
+    set<uint64_t> snoop_queue;
+    uint64_t w_addr;
+    int w_count;
     std::map<uint64_t, std::pair<uint64_t, int> > addr_to_tag;
 
     void dram_read_complete(unsigned id, uint64_t address, uint64_t clock_cycle);

@@ -2,8 +2,10 @@
 
 module top
 #(
-  BUS_DATA_WIDTH = 64,
-  BUS_TAG_WIDTH = 13
+  ID_WIDTH = 13,
+  ADDR_WIDTH = 64,
+  DATA_WIDTH = 64,
+  STRB_WIDTH = DATA_WIDTH/8
 )
 (
   input  clk,
@@ -13,16 +15,47 @@ module top
   input  [63:0] entry,
   input  [63:0] stackptr,
   input  [63:0] satp,
-  
+
   // interface to connect to the bus
-  output bus_reqcyc,
-  output bus_respack,
-  output [BUS_DATA_WIDTH-1:0] bus_req,
-  output [BUS_TAG_WIDTH-1:0] bus_reqtag,
-  input  bus_respcyc,
-  input  bus_reqack,
-  input  [BUS_DATA_WIDTH-1:0] bus_resp,
-  input  [BUS_TAG_WIDTH-1:0] bus_resptag
+  output  wire [ID_WIDTH-1:0]    m_axi_awid,
+  output  wire [ADDR_WIDTH-1:0]  m_axi_awaddr,
+  output  wire [7:0]             m_axi_awlen,
+  output  wire [2:0]             m_axi_awsize,
+  output  wire [1:0]             m_axi_awburst,
+  output  wire                   m_axi_awlock,
+  output  wire [3:0]             m_axi_awcache,
+  output  wire [2:0]             m_axi_awprot,
+  output  wire                   m_axi_awvalid,
+  input   wire                   m_axi_awready,
+  output  wire [DATA_WIDTH-1:0]  m_axi_wdata,
+  output  wire [STRB_WIDTH-1:0]  m_axi_wstrb,
+  output  wire                   m_axi_wlast,
+  output  wire                   m_axi_wvalid,
+  input   wire                   m_axi_wready,
+  input   wire [ID_WIDTH-1:0]    m_axi_bid,
+  input   wire [1:0]             m_axi_bresp,
+  input   wire                   m_axi_bvalid,
+  output  wire                   m_axi_bready,
+  output  wire [ID_WIDTH-1:0]    m_axi_arid,
+  output  wire [ADDR_WIDTH-1:0]  m_axi_araddr,
+  output  wire [7:0]             m_axi_arlen,
+  output  wire [2:0]             m_axi_arsize,
+  output  wire [1:0]             m_axi_arburst,
+  output  wire                   m_axi_arlock,
+  output  wire [3:0]             m_axi_arcache,
+  output  wire [2:0]             m_axi_arprot,
+  output  wire                   m_axi_arvalid,
+  input   wire                   m_axi_arready,
+  input   wire [ID_WIDTH-1:0]    m_axi_rid,
+  input   wire [DATA_WIDTH-1:0]  m_axi_rdata,
+  input   wire [1:0]             m_axi_rresp,
+  input   wire                   m_axi_rlast,
+  input   wire                   m_axi_rvalid,
+  output  wire                   m_axi_rready,
+  input   wire                   m_axi_acvalid,
+  output  wire                   m_axi_acready,
+  input   wire [ADDR_WIDTH-1:0]  m_axi_acaddr,
+  input   wire [3:0]             m_axi_acsnoop
 );
 
   logic [63:0] pc;

@@ -19,20 +19,10 @@
 
 using namespace std;
 
-enum {
-    READ   = 0b1,
-    WRITE  = 0b0,
-    INVAL  = 0b1000,
-    MEMORY = 0b0001,
-    MMIO   = 0b0011,
-    PORT   = 0b0100,
-    IRQ    = 0b1110
-};
-
 System* System::sys;
 
 System::System(Vtop* top, unsigned ramsize, const char* ramelf, const int argc, char* argv[], int ps_per_clock)
-    : top(top), ps_per_clock(ps_per_clock), ramsize(ramsize), max_elf_addr(0), show_console(false), interrupts(0), rx_count(0), ticks(0), ecall_brk(0), errno_addr(NULL)
+    : top(top), ps_per_clock(ps_per_clock), ramsize(ramsize), max_elf_addr(0), show_console(false), interrupts(0), w_count(0), ticks(0), ecall_brk(0), errno_addr(NULL)
 {
     sys = this;
 
@@ -107,106 +97,94 @@ void System::tick(int clk) {
 
     if (!clk) return;
 
-    if (top->reset && top->bus_reqcyc) {
-        cerr << "Received a bus request during RESET.  Ignoring..." << endl;
+    if (top->reset) {
+        if (top->m_axi_arvalid || top->m_axi_awvalid)
+            cerr << "Received a bus request during RESET.  Ignoring..." << endl;
+        top->m_axi_awready = top->m_axi_wready = top->m_axi_arready = 1;
+        addr_to_tag.clear();
+        r_queue.clear();
+        resp_queue.clear();
+        snoop_queue.clear();
         return;
     }
 
-    if (ticks % (ps_per_clock * 1000) == 0) {
-        int ch = getch();
-        if (ch != ERR) {
-            if (!(interrupts & (1<<IRQ_KBD))) {
-                interrupts |= (1<<IRQ_KBD);
-                tx_queue.push_back(make_pair(IRQ_KBD,(int)IRQ));
-                keys.push(ch);
-            }
-        }
-    }
-
     dramsim->update();    
-    if (!tx_queue.empty() && top->bus_respack) tx_queue.pop_front();
-    if (!tx_queue.empty()) {
-        top->bus_respcyc = 1;
-        top->bus_resp = tx_queue.begin()->first;
-        top->bus_resptag = tx_queue.begin()->second;
-        //cerr << "responding data " << top->bus_resp << " on tag " << std::hex << top->bus_resptag << endl;
-    } else {
-        top->bus_respcyc = 0;
-        top->bus_resp = 0xaaaaaaaaaaaaaaaaULL;
-        top->bus_resptag = 0xaaaa;
-    }
 
-    if (top->bus_reqcyc) {
-
-        if (rx_count) {
-            switch(cmd) {
-            case MEMORY:
-                // if transfer is in progress, can't change mind about willAcceptTransaction()
-                assert(willAcceptTransaction(xfer_addr));
-                *((uint64_t*)(&ram[xfer_addr + (8-rx_count)*8])) = top->bus_req;
-                break;
-            case MMIO:
-                assert(xfer_addr < ramsize);
-                *((uint64_t*)(&ram[xfer_addr])) = top->bus_req;
-                if (show_console)
-                    if ((xfer_addr - 0xb8000) < 80*25*2) {
-                        int screenpos = xfer_addr - 0xb8000;
-                        for(int shift = 0; shift < 8; shift += 2) {
-                            int val = (top->bus_req >> (8*shift)) & 0xffff;
-                            //cerr << "val=" << std::hex << val << endl;
-                            attron(val & ~0xff);
-                            mvaddch(screenpos / 160, screenpos % 160 + shift/2, val & 0xff);
-                        }
-                        refresh();
-                    }
-                break;
-            }
-            --rx_count;
-            return;
-        }
-
-        cmd = (top->bus_reqtag >> 8) & 0xf;
-
-        bool isWrite = ((top->bus_reqtag >> 12) & 1) == WRITE;
-        if (cmd == MEMORY && isWrite)
-            rx_count = 8;
-        else if (cmd == MMIO && isWrite)
-            rx_count = 1;
-        else
-            rx_count = 0;
-
-        switch(cmd) {
-        case MEMORY:
-            xfer_addr = top->bus_req & ~0x3fULL;
-            if (!willAcceptTransaction(xfer_addr)) break;
-
-            top->bus_reqack = 1;
-
-            if (xfer_addr > (ramsize - 64)) {
+    if (top->m_axi_arvalid) {
+        uint64_t xfer_addr = top->m_axi_araddr & ~0x3fULL;
+        if (top->m_axi_arburst != 2) {
+            cerr << "Read request with non-wrap burst (" << std::dec << top->m_axi_arburst << ") unsupported" << endl;
+            Verilated::gotFinish(true);
+            if (top->m_axi_arlen+1 != 8) {
+                cerr << "Read request with length != 8 (" << std::dec << top->m_axi_arlen << "+1)" << endl;
+                Verilated::gotFinish(true);
+            } else if (xfer_addr > (ramsize - 64)) {
                 cerr << "Invalid 64-byte access, address " << std::hex << xfer_addr << " is beyond end of memory at " << ramsize << endl;
                 Verilated::gotFinish(true);
             } else if (addr_to_tag.find(xfer_addr)!=addr_to_tag.end()) {
                 cerr << "Access for " << std::hex << xfer_addr << " already outstanding.  Ignoring..." << endl;
             } else {
+                assert(willAcceptTransaction(xfer_addr)); // if this gets triggered, need to rethink AXI "ready" signal strategy
                 assert(
-                        dramsim->addTransaction(isWrite, xfer_addr)
+                        dramsim->addTransaction(false, xfer_addr)
                       );
-                //cerr << "add transaction " << std::hex << xfer_addr << " on tag " << top->bus_reqtag << endl;
-                if (!isWrite) addr_to_tag[xfer_addr] = make_pair(top->bus_req, top->bus_reqtag);
+                addr_to_tag[xfer_addr] = make_pair(top->m_axi_araddr, top->m_axi_arid);
             }
-            break;
-        case MMIO:
-            xfer_addr = top->bus_req;
-            assert(!(xfer_addr & 7));
-            if (!isWrite) tx_queue.push_back(make_pair(*((uint64_t*)(&ram[xfer_addr])),top->bus_reqtag)); // hack - real I/O takes time
-            break;
-        default:
-            cerr << "Unknown command" << std::hex << cmd << endl;
+        }
+    }
+
+    top->m_axi_rvalid = 0;
+    if (!r_queue.empty() && top->m_axi_rready) {
+        top->m_axi_rvalid = 1;
+        top->m_axi_rdata = r_queue.begin()->first;
+        top->m_axi_rid = r_queue.begin()->second;
+        r_queue.pop_front();
+    }
+
+    if (top->m_axi_awvalid) {
+        uint64_t w_addr = top->m_axi_awaddr & ~0x3fULL;
+
+        if (top->m_axi_awburst != 1) {
+            cerr << "Write request with non-incr burst (" << std::dec << top->m_axi_awburst << ") unsupported" << endl;
             Verilated::gotFinish(true);
-        };
-    } else {
-        top->bus_reqack = 0;
-        rx_count = 0;
+        } else if (top->m_axi_awlen+1 != 8) {
+            cerr << "Write request with length != 8 (" << std::dec << top->m_axi_awlen << "+1)" << endl;
+            Verilated::gotFinish(true);
+        } else if (w_addr > (ramsize - 64)) {
+            cerr << "Invalid 64-byte access, address " << std::hex << w_addr << " is beyond end of memory at " << ramsize << endl;
+            Verilated::gotFinish(true);
+        } else if (addr_to_tag.find(w_addr)!=addr_to_tag.end()) {
+            cerr << "Access for " << std::hex << w_addr << " already outstanding.  Ignoring..." << endl;
+        } else {
+            assert(willAcceptTransaction(w_addr)); // if this gets triggered, need to rethink AXI "ready" signal strategy
+            assert(
+                    dramsim->addTransaction(true, w_addr)
+                  );
+            addr_to_tag[w_addr] = make_pair(top->m_axi_awaddr, top->m_axi_awid);
+        }
+        w_count = 8;
+    }
+
+    if (top->m_axi_wvalid && w_count) {
+        // if transfer is in progress, can't change mind about willAcceptTransaction()
+        assert(willAcceptTransaction(w_addr));
+        *((uint64_t*)(&ram[w_addr + (8-w_count)*8])) = top->m_axi_wdata;
+        --w_count;
+    }
+
+    top->m_axi_bvalid = 0;
+    if (!resp_queue.empty() && top->m_axi_bready) {
+        top->m_axi_bvalid = 1;
+        top->m_axi_bid = *resp_queue.begin();
+        resp_queue.pop_front();
+    }
+
+    top->m_axi_acvalid = 0;
+    if (!snoop_queue.empty() && top->m_axi_acready) {
+        top->m_axi_acvalid = 1;
+        top->m_axi_acaddr = *snoop_queue.begin();
+        top->m_axi_acsnoop = 0xD; // MakeInvalid
+        snoop_queue.erase(snoop_queue.begin());
     }
 }
 
@@ -215,12 +193,16 @@ void System::dram_read_complete(unsigned id, uint64_t address, uint64_t clock_cy
     assert(tag != addr_to_tag.end());
     uint64_t orig_addr = tag->second.first;
     for(int i = 0; i < 64; i += 8)
-        tx_queue.push_back(make_pair(*((uint64_t*)(&ram[((orig_addr&(~63))+((orig_addr+i)&63))])),tag->second.second));
+        r_queue.push_back(make_pair(*((uint64_t*)(&ram[((orig_addr&(~63))+((orig_addr+i)&63))])),tag->second.second));
     addr_to_tag.erase(tag);
 }
 
 void System::dram_write_complete(unsigned id, uint64_t address, uint64_t clock_cycle) {
     do_finish_write(address, 64);
+    map<uint64_t, pair<uint64_t, int> >::iterator tag = addr_to_tag.find(address);
+    assert(tag != addr_to_tag.end());
+    resp_queue.push_back(tag->second.second);
+    addr_to_tag.erase(tag);
 }
 
 void System::set_errno(const int new_errno) {
@@ -231,7 +213,7 @@ void System::set_errno(const int new_errno) {
 }
 
 void System::invalidate(const uint64_t phy_addr) {
-    tx_queue.push_front(make_pair(phy_addr, INVAL << 8));
+    snoop_queue.insert(phy_addr & ~0x3fULL);
 }
 
 uint64_t System::get_phys_page() {
