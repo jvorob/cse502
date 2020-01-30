@@ -134,11 +134,11 @@ void System::tick(int clk) {
     }
 
     top->m_axi_rvalid = 0;
-    if (!r_queue.empty() && top->m_axi_rready) {
+    if (!r_queue.empty()) {
         top->m_axi_rvalid = 1;
         top->m_axi_rdata = r_queue.begin()->first;
         top->m_axi_rid = r_queue.begin()->second;
-        r_queue.pop_front();
+        if (top->m_axi_rready) r_queue.pop_front();
     }
 
     if (top->m_axi_awvalid) {
@@ -173,18 +173,18 @@ void System::tick(int clk) {
     }
 
     top->m_axi_bvalid = 0;
-    if (!resp_queue.empty() && top->m_axi_bready) {
+    if (!resp_queue.empty()) {
         top->m_axi_bvalid = 1;
         top->m_axi_bid = *resp_queue.begin();
-        resp_queue.pop_front();
+        if (top->m_axi_bready) resp_queue.pop_front();
     }
 
     top->m_axi_acvalid = 0;
-    if (!snoop_queue.empty() && top->m_axi_acready) {
+    if (!snoop_queue.empty()) {
         top->m_axi_acvalid = 1;
         top->m_axi_acaddr = *snoop_queue.begin();
         top->m_axi_acsnoop = 0xD; // MakeInvalid
-        snoop_queue.erase(snoop_queue.begin());
+        if (top->m_axi_acready) snoop_queue.erase(snoop_queue.begin());
     }
 }
 
