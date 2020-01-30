@@ -63,6 +63,7 @@ module top
   always_ff @ (posedge clk)
     if (reset) begin
       pc <= entry;
+	
     end else begin
       $display("Hello World!  @ %x", pc);
       $finish;
@@ -71,4 +72,18 @@ module top
   initial begin
     $display("Initializing top, entry point = 0x%x", entry);
   end
+	
+	function void decode(input logic[31:0] instruc);
+		if (0 == 1) begin
+			$display("First instruction");
+		end
+		else if (0 == 1) begin
+			$display("Second instruction");
+		end
+		else
+			$display("Not recognized instruction.");
+		end
+	endfunction
+
+	
 endmodule
