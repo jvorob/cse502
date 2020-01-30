@@ -137,7 +137,8 @@ void System::tick(int clk) {
     if (!r_queue.empty()) {
         top->m_axi_rvalid = 1;
         top->m_axi_rdata = r_queue.begin()->first;
-        top->m_axi_rid = r_queue.begin()->second;
+        top->m_axi_rid = r_queue.begin()->second.first;
+        top->m_axi_rlast = r_queue.begin()->second.second;
         if (top->m_axi_rready) r_queue.pop_front();
     }
 
@@ -193,7 +194,7 @@ void System::dram_read_complete(unsigned id, uint64_t address, uint64_t clock_cy
     assert(tag != addr_to_tag.end());
     uint64_t orig_addr = tag->second.first;
     for(int i = 0; i < 64; i += 8)
-        r_queue.push_back(make_pair(*((uint64_t*)(&ram[((orig_addr&(~63))+((orig_addr+i)&63))])),tag->second.second));
+        r_queue.push_back(make_pair(*((uint64_t*)(&ram[((orig_addr&(~63))+((orig_addr+i)&63))])),make_pair(tag->second.second,i+8>=64)));
     addr_to_tag.erase(tag);
 }
 

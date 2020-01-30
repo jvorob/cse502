@@ -39,7 +39,7 @@ class System {
 
     uint64_t load_elf(const char* filename);
 
-    list<pair<uint64_t, int> > r_queue;
+    list<pair<uint64_t, pair<int, bool> > > r_queue;
     list<int> resp_queue;
     set<uint64_t> snoop_queue;
     uint64_t w_addr;
