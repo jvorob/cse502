@@ -92,8 +92,8 @@ module top
 			case(state)
 	        3'h0: begin  // Start Read
 				if(!m_axi_arready || !m_axi_arvalid) begin
-                    $display("Hello");
-                    m_axi_araddr <= pc[63:3];
+                    // It's addressed by bytes, even though you don't get full granularity at byte level
+                    m_axi_araddr <= pc[63:0];
                     m_axi_arvalid <= 1'b1;
                 end else begin
 					pc <= pc + 64'h8;
