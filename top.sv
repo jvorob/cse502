@@ -69,59 +69,64 @@ module top
 		else if (0 == 1) begin
 			$display("Second instruction");
 		end
-		else
+		else begin
 			$display("Not recognized instruction.");
 		end
 	endfunction
 
-  always_ff @ (posedge clk)
+
+  always_ff @ (posedge clk) begin
 		if (reset) begin
 			state <= 3'h0;
 			pc <= entry;
-			m_axi_arid <= 0;
-			m_axi_arlen <= 8'h7;
-			m_axi_arsize <= 3'h3;
-			m_axi_arburst <= 2'h2;
-			m_axi_arlock <= 1'b0;
-			m_axi_arcache <= 4'h0;
-			m_axi_arprot <= 3'h6;
-			m_axi_arvalid <= 1'b0;
-			m_axi_rready <= 1'b0;
+			m_axi_arid <= 0;      // master id
+			m_axi_arlen <= 8'h7;  // +1, =8 words requested
+			m_axi_arsize <= 3'h3; // 2^3, word width is 8 bytes
+			m_axi_arburst <= 2'h2;// 2 in enum, bursttype=wrap
+			m_axi_arlock <= 1'b0; // no lock
+			m_axi_arcache <= 4'h0;// no cache
+			m_axi_arprot <= 3'h6; // enum, means something
+			m_axi_arvalid <= 1'b0;// signal
+			m_axi_rready <= 1'b0; // signal
 		end else begin
 			case(state)
-			3'h0: begin
-				m_axi_araddr <= pc[63:3];
-				m_axi_arvalid <= 1'b1;
-				if(m_axi_arready) begin
+	        3'h0: begin  // Start Read
+				if(!m_axi_arready || !m_axi_arvalid) begin
+                    $display("Hello");
+                    m_axi_araddr <= pc[63:3];
+                    m_axi_arvalid <= 1'b1;
+                end else begin
 					pc <= pc + 64'h8;
 					m_axi_rready <= 1'b1;
 					m_axi_arvalid <= 1'b0;
 					state <= 3'h1;
 				end
 			end
-			3'h1: begin
+			3'h1: begin // Address Accepted / Awaiting Read Valid
 				if(m_axi_rvalid) begin
 					ir <= m_axi_rdata;
 					state <= 3'h2;
 				end
 			end
-			3'h2: begin
+			3'h2: begin // Wait for remaining blocks to be sent
 				if(m_axi_rlast) begin
 					m_axi_rready <= 1'b0;
 					state <= 3'h3;
 				end
 			end
-			3'h3: begin
-				decode(ir[31:0);
+			3'h3: begin // Read done, decode low
+				decode(ir[31:0]);
 				state <= 3'h4;
 			end
-			3'h4: begin
+			3'h4: begin // Decode hi
 				decode(ir[63:32]);
 				state <= 3'h0;
 			end
 			default: state <= 3'h0;
 			endcase
 		end
+	end
+	
 
   initial begin
 		$display("Initializing top, entry point = 0x%x", entry);
