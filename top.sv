@@ -61,6 +61,18 @@ module top
   logic [63:0] pc;
   logic [2:0] state;
   logic [63:0] ir;
+	
+	function void decode(input logic[31:0] instruc);
+		if (0 == 1) begin
+			$display("First instruction");
+		end
+		else if (0 == 1) begin
+			$display("Second instruction");
+		end
+		else
+			$display("Not recognized instruction.");
+		end
+	endfunction
 
   always_ff @ (posedge clk)
 		if (reset) begin
@@ -114,4 +126,5 @@ module top
   initial begin
 		$display("Initializing top, entry point = 0x%x", entry);
   end
+	
 endmodule
