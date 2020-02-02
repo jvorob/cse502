@@ -66,7 +66,7 @@ module top
     OP_LOAD       = 7'b0000011 ,
     OP_LOAD_FP    = 7'b0000111 , // not used
     OP_CUSTOM0    = 7'b0001011 , // not used
-    OP_MISC_MEM   = 7'b0001111 , // not used
+    OP_MISC_MEM   = 7'b0001111 ,
     OP_OP_IMM     = 7'b0010011 ,
     OP_AUIPC      = 7'b0010111 ,
     OP_IMM_32     = 7'b0011011 ,
@@ -94,30 +94,100 @@ module top
     OP_JALR       = 7'b1100111 ,
     OP_RSRVD5     = 7'b1101011 ,
     OP_JAL        = 7'b1101111 ,
-    OP_SYSTEM     = 7'b1110011 , // not used
+    OP_SYSTEM     = 7'b1110011 ,
     OP_RSRVD6     = 7'b1110111 , // not used
     OP_CUSTOM3    = 7'b1111011 , // not used
     OP_RSRVD7     = 7'b1111111   // not used
   } Opcode;
 	
 
-	function void decode(input logic[31:0] instruc);
+  // Values of F3 for various ops
+  typedef enum bit[2:0] {
+    F3OP_ADD //TODO
+  } Funct3_Op;
 
-    Opcode op = instruc[6:0];
+  // Values of F3 for branches
+  typedef enum bit[2:0] {
+    F3B_BEQ  = 3'b000,
+    F3B_BNE  = 3'b001,
+    F3B_BLT  = 3'b100,
+    F3B_BGE  = 3'b101,
+    F3B_BLTU = 3'b110,
+    F3B_BGEU = 3'b111
+  } Funct3_Branch;
 
-    $display("Decoding instruction %b \n", instruc);
+	function void decode(input logic[31:0] inst);
 
-    $display("got opcode '%b\', name is %s\n", op, op.name());
+    Opcode op = inst[6:0];
 
-		if (0 == 1) begin
-			$display("First instruction");
-		end
-		else if (0 == 1) begin
-			$display("Second instruction");
-		end
-		else begin
-			$display("Not recognized instruction.");
-		end
+    // There's 5 different kinds of immediates: I, S, SB, U, UJ
+    // NOTE: When immediates need to be sign-extended,
+    //       you can always take sign from inst[31]
+    logic [11:0]  immed_I  = inst[31:20];
+    logic [11:0]  immed_S  = { inst[31:                   25], inst[11:        7] };
+    logic [12:0]  immed_SB = { inst[31], inst[7], inst[30:25], inst[11:8],   1'b0 };
+    logic [31:0]  immed_U  = { inst[31:          12],                       12'b0 };
+    logic [20:0]  immed_UJ = { inst[31], inst[19:12], inst[20], inst[30:24], 1'b0 } ;
+
+    logic [4:0] rs1 = inst[19:15];
+    logic [4:0] rs2 = inst[24:20];
+    logic [4:0] rd  = inst[11: 7];
+    logic [2:0] funct3 = inst[14:12];
+    logic [6:0] funct7 = inst[31:25];
+
+    $display("\n");
+    $display("Decoding instruction %b ", inst);
+    $display("got opcode %s ('%b\')", op.name(), op);
+
+    case (op) inside
+      OP_LUI: begin
+        $display("LUI 0x%x to r%0d'", immed_U, rd);
+      end
+      OP_AUIPC: begin
+        $display("AUIPC 0x%x to r%0d'", immed_U, rd);
+      end
+      OP_JAL: begin
+        $display("JAL 0x%x, return addr in r%0d'", immed_UJ, rd);
+      end
+      OP_JALR: begin
+        if (funct3 != 3'b000) $error("ERROR: Invalid funct3 for JALR op, '%b'", funct3);
+        $display("JALR r%0d+0x%x, return addr in r%0d'", rs1, immed_I, rd);
+      end
+
+      OP_BRANCH: begin
+        case (funct3) inside
+          F3B_BEQ, F3B_BNE, F3B_BLT, F3B_BGE, F3B_BLTU, F3B_BGEU: begin
+            Funct3_Branch branch_code = funct3;
+            $display("Branch op: %s r%0d, r%0d, to 0x%x", branch_code.name, rs1, rs2, immed_SB);
+          end
+          default: begin
+            $error("ERROR: Invalid funct3 for BRANCH op, '%b'", funct3);
+          end
+        endcase
+      end
+      OP_LOAD: begin
+        //TODO --Jan
+      end
+      OP_STORE: begin
+        //TODO --Jan
+      end
+      OP_OP_IMM: begin
+        //TODO --Jan
+      end
+
+      default: begin
+        $display("Not recognized instruction.");
+        $display("got opcode %s ('%b\')", op.name(), op);
+
+        $display(" I-Immed is %x (%b)", immed_I, immed_I);
+        $display(" S-Immed is %x (%b)", immed_S, immed_S);
+        $display("SB-Immed is %x (%b)", immed_SB, immed_SB);
+        $display(" U-Immed is %x (%b)", immed_U, immed_U);
+        $display("UJ-Immed is %x (%b)", immed_UJ, immed_UJ);
+      end
+    endcase
+
+
 	endfunction
 
 
