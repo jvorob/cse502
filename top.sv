@@ -61,8 +61,54 @@ module top
   logic [63:0] pc;
   logic [2:0] state;
   logic [63:0] ir;
+
+  typedef enum bit[6:0] {
+    OP_LOAD       = 7'b0000011 ,
+    OP_LOAD_FP    = 7'b0000111 , // not used
+    OP_CUSTOM0    = 7'b0001011 , // not used
+    OP_MISC_MEM   = 7'b0001111 , // not used
+    OP_OP_IMM     = 7'b0010011 ,
+    OP_AUIPC      = 7'b0010111 ,
+    OP_IMM_32     = 7'b0011011 ,
+    OP_RSRVD1     = 7'b0011111 , // not used
+
+    OP_STORE      = 7'b0100011 ,
+    OP_STORE_FP   = 7'b0100111 , // not used
+    OP_CUSTOM1    = 7'b0101011 , // not used
+    OP_AMO        = 7'b0101111 , // not used
+    OP_OP         = 7'b0110011 ,
+    OP_LUI        = 7'b0110111 ,
+    OP_OP_32      = 7'b0111011 ,
+    OP_RSRVD2     = 7'b0111111 , // not used
+    
+    OP_MADD       = 7'b1000011 , // not used
+    OP_MSUB       = 7'b1000111 , // not used
+    OP_NMSUB      = 7'b1001011 , // not used
+    OP_NMADD      = 7'b1001111 , // not used
+    OP_OP_FP      = 7'b1010011 , // not used
+    OP_RSRVD3     = 7'b1010111 , // not used
+    OP_CUSTOM2    = 7'b1011011 , // not used
+    OP_RSRVD4     = 7'b1011111 , // not used
+
+    OP_BRANCH     = 7'b1100011 ,
+    OP_JALR       = 7'b1100111 ,
+    OP_RSRVD5     = 7'b1101011 ,
+    OP_JAL        = 7'b1101111 ,
+    OP_SYSTEM     = 7'b1110011 , // not used
+    OP_RSRVD6     = 7'b1110111 , // not used
+    OP_CUSTOM3    = 7'b1111011 , // not used
+    OP_RSRVD7     = 7'b1111111   // not used
+  } Opcode;
 	
+
 	function void decode(input logic[31:0] instruc);
+
+    Opcode op = instruc[6:0];
+
+    $display("Decoding instruction %b \n", instruc);
+
+    $display("got opcode '%b\', name is %s\n", op, op.name());
+
 		if (0 == 1) begin
 			$display("First instruction");
 		end
