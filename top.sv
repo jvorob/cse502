@@ -1,5 +1,52 @@
 `include "Sysbus.defs"
 
+
+module Decoder
+(
+	input [31:0] inst,
+	output [4:0] rs1,
+	output [4:0] rs2,
+	output [4:0] rd,
+	output en_rs1,
+	output en_rs2,
+	output en_rd,
+	output [63:0] imm,
+	output [2:0] func3,
+	output [6:0] func7,
+	output [6:0] op
+);
+
+
+endmodule
+
+module RegFile
+(
+	input clk,
+	input [4:0] read_addr1,
+	input [4:0] read_addr2,
+	input [4:0] wb_addr,
+	input [63:0] wb_data,
+	input wb_en,
+	output [63:0] out1,
+	output [63:0] out2
+);
+
+endmodule
+
+module Alu
+(
+	input [63:0] a,			// rs1
+	input [63:0] b,			// rs2 or immediate
+	input [2:0] func3,
+	input [6:0] func7,
+	input [6:0] op,
+	output [63:0] result
+);
+
+
+endmodule
+
+
 module top
 #(
   ID_WIDTH = 13,
@@ -163,6 +210,60 @@ module top
     F3I64_SRXIW  = 3'b101
   } Funct3_RV64Iimm;
 
+
+	logic [31:0] cur_inst;
+
+	logic [4:0] rs1;
+	logic [4:0] rs2;
+	logic [4:0] rd;
+	logic en_rs1;
+	logic en_rs2;
+	logic en_rd;
+	logic [63:0] imm;
+	logic [2:0] func3;
+	logic [6:0] func7;
+	logic [6:0] op;
+
+	Decoder d(
+		.inst(cur_inst),
+		.rs1(rs1),
+		.rs2(rs2),
+		.rd(rd),
+		.en_rs1(en_rs1),
+		.en_rs2(en_rs2),
+		.en_rd(en_rd),
+		.imm(imm),
+		.func3(func3),
+		.func7(func7),
+		.op(op)
+	);
+
+	logic [63:0] out1;
+	logic [63:0] out2;
+
+	RegFile rf(
+		.clk(clk),
+		.read_addr1(rs1),
+		.read_addr2(rs2),
+		.wb_addr(rd),
+		.wb_data(alu_out),
+		.wb_en(en_rd),				// still needs to be modified
+		.out1(out1),
+		.out2(out2)
+	);
+	
+	logic [63:0] alu_out;
+
+	Alu a(
+		.a(out1),
+		.b(out2),
+		.func3(func3),
+		.func7(func7),
+		.op(op),
+		.result(alu_out)
+	);
+
+
 	function void decode(input logic[31:0] inst);
 
     Opcode op = inst[6:0];
@@ -182,6 +283,11 @@ module top
     logic [2:0] funct3 = inst[14:12];
     logic [6:0] funct7 = inst[31:25];
     logic [5:0] shamt = inst[25:20];
+	logic [11:0] csr = inst[31:20];
+	logic [4:0] zimm = inst[19:15];
+	logic [3:0] pred = inst[27:24];
+	logic [3:0] succ = inst[23:20];
+
 
     $display("\n");
     $display("Decoding instruction %b ", inst);
