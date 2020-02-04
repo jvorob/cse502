@@ -116,6 +116,18 @@ module top
     F3B_BGEU = 3'b111
   } Funct3_Branch;
 
+  // Values of F3 for RV32M
+  typedef enum bit[2:0] {
+    F3M_MUL    = 3'b000,
+    F3M_MULH   = 3'b001,
+    F3M_MULHSU = 3'b010,
+    F3M_MULHU  = 3'b011,
+    F3M_DIV    = 3'b100,
+    F3M_DIVU   = 3'b101,
+    F3M_REM    = 3'b110,
+    F3M_REMU   = 3'b111
+  } Funct3_RV32M;
+
 	function void decode(input logic[31:0] inst);
 
     Opcode op = inst[6:0];
@@ -127,7 +139,7 @@ module top
     logic [11:0]  immed_S  = { inst[31:                   25], inst[11:        7] };
     logic [12:0]  immed_SB = { inst[31], inst[7], inst[30:25], inst[11:8],   1'b0 };
     logic [31:0]  immed_U  = { inst[31:          12],                       12'b0 };
-    logic [20:0]  immed_UJ = { inst[31], inst[19:12], inst[20], inst[30:24], 1'b0 } ;
+    logic [20:0]  immed_UJ = { inst[31], inst[19:12], inst[20], inst[30:21], 1'b0 } ;
 
     logic [4:0] rs1 = inst[19:15];
     logic [4:0] rs2 = inst[24:20];
@@ -174,6 +186,22 @@ module top
       OP_OP_IMM: begin
         //TODO --Jan
       end
+
+      OP_OP: begin
+        if (funct7[0]) begin
+          if (funct7 != 7'b000_0001) $error("ERROR: Invalid funct7 for RV32M op, '%b'", funct7);
+          Funct3_RV32M RV32M_code = funct3;
+          $display("RV32M op: %s r%0d, r%0d, r%0d", RV32M_code.name(), rd, rs1, rs2);
+        end else begin
+          //TODO --Dan
+        end
+      end 
+      OP_IMM_32: begin
+        //TODO --Zav
+      end 
+      OP_OP_32: begin
+        //TODO --Zav
+      end 
 
       default: begin
         $display("Not recognized instruction.");
