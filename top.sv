@@ -106,6 +106,18 @@ module top
     F3OP_ADD //TODO
   } Funct3_Op;
 
+  // Values of F3 for immediate ops
+  typedef enum bit[2:0] { //TODO --Jan
+    F3OPI_     = 3'b000,
+    F3OPI_SLLI = 3'b001,
+    F3OPI_     = 3'b010,
+    F3OPI_     = 3'b011,
+    F3OPI_     = 3'b100,
+    F3OPI_SRXI = 3'b101,
+    F30PI_     = 3'b110,
+    F3OPI_     = 3'b111
+  } Funct3_iOp;
+
   // Values of F3 for branches
   typedef enum bit[2:0] {
     F3B_BEQ  = 3'b000,
@@ -127,6 +139,29 @@ module top
     F3M_REM    = 3'b110,
     F3M_REMU   = 3'b111
   } Funct3_RV32M;
+  
+  // Values of F3 for RV64M
+  typedef enum bit[2:0] {
+    F3M_MULW   = 3'b000,
+    F3M_DIVW   = 3'b100,
+    F3M_DIVUW  = 3'b101,
+    F3M_REMW   = 3'b110,
+    F3M_REMUW  = 3'b111
+  } Funct3_RV64M;
+
+  // Values of F3 for various 64-bit ops
+  typedef enum bit[2:0] {
+    F3OP_ADDW_SUBW = 3'b000,
+    F3OP_SLLW      = 3'b001,
+    F3OP_SRXW      = 3'b101
+  } Funct3_Op64;
+  
+  // Values of F3 for RV64I immediate ops
+  typedef enum bit[2:0] {
+    F3I64_ADDIW  = 3'b000,
+    F3I64_SLLIW  = 3'b001,
+    F3I64_SRXIW  = 3'b101
+  } Funct3_RV64Iimm;
 
 	function void decode(input logic[31:0] inst);
 
@@ -146,6 +181,7 @@ module top
     logic [4:0] rd  = inst[11: 7];
     logic [2:0] funct3 = inst[14:12];
     logic [6:0] funct7 = inst[31:25];
+    logic [5:0] shamt = inst[25:20];
 
     $display("\n");
     $display("Decoding instruction %b ", inst);
@@ -184,7 +220,19 @@ module top
         //TODO --Jan
       end
       OP_OP_IMM: begin
-        //TODO --Jan
+        Funct3_iOp iOp_code = funct3;
+        case (iOp_code) inside
+          F3OPI_SLLI: begin
+            if (funct7[6:1] != 6'b00_0000) $error("ERROR: Invalid funct7 for SLLI op, '%b'", funct7[6:1]);
+            $display("SLLI r%0d, r%0d, shamt: 0x%x", rd, rs1, shamt);
+          end
+          F3OPI_SRXI: begin
+            if (funct7[6:1] == 6'b00_0000) $display("SRLI r%0d, r%0d, shamt: 0x%x", rd, rs1, shamt);
+            else if (funct7[6:1] == 6'b01_0000) $display("SRAI r%0d, r%0d, shamt: 0x%x", rd, rs1, shamt);
+            else $error("ERROR: Invalid funct7 for SRLI / SRAI op, '%b'", funct7[6:1]);
+          end
+          //TODO --Jan
+        endcase
       end
 
       OP_OP: begin
@@ -197,10 +245,50 @@ module top
         end
       end 
       OP_IMM_32: begin
-        //TODO --Zav
+        Funct3_RV64Iimm RV64Iimm_code = funct3;
+        case (RV64Iimm_code) inside
+          F3I64_ADDIW: $display("ADDIW r%0d, r%0d, 0x%x", rd, rs1, immed_I);
+          F3I64_SLLIW: begin
+            if (funct7 != 7'b000_0000) $error("ERROR: Invalid funct7 for SLLIW op, '%b'", funct7);
+            $display("SLLIW r%0d, r%0d, shamt: 0x%x", rd, rs1, shamt[4:0]);
+          end
+          F3I64_SRXIW: begin
+            if (funct7 == 7'b000_0000) $display("SRLIW r%0d, r%0d, shamt: 0x%x", rd, rs1, shamt[4:0]);
+            else if (funct7 == 7'b010_0000) $display("SRAIW r%0d, r%0d, shamt: 0x%x", rd, rs1, shamt[4:0]);
+            else $error("ERROR: Invalid funct7 for SRLIW / SRAIW op, '%b'", funct7);
+          end
+          default: $error("ERROR: Invalid funct3 for 64-bit immediate op, '%b'", funct3);
+        endcase
       end 
       OP_OP_32: begin
-        //TODO --Zav
+        if (funct7[0]) begin
+          if (funct7 != 7'b000_0001) $error("ERROR: Invalid funct7 for RV64M op, '%b'", funct7);
+          case (funct3) inside
+            F3M_MULW, F3M_DIVW, F3M_DIVUW, F3M_REMW, F3M_REMUW: begin
+              Funct3_RV64M RV64M_code = funct3;
+              $display("RV64M op: %s r%0d, r%0d, r%0d", RV64M_code.name(), rd, rs1, rs2);
+            end
+            default: $error("ERROR: Invalid funct3 for RV64M op, '%b'", funct3);
+          endcase
+        end else begin
+          Funct3_Op64 Op64_code = funct3;
+          case (Op64_code) inside
+            F3OP_ADDW_SUBW: begin
+              if (funct7 == 7'b000_0000) $display("ADDW r%0d, r%0d, r%0d", rd, rs1, rs2);
+              else if (funct7 == 7'b010_0000) $display("SUBW r%0d, r%0d, r%0d", rd, rs1, rs2);
+              else $error("ERROR: Invalid funct7 for ADDW / SUBW op, '%b'", funct7);
+            end
+            F3OP_SLLW: begin
+              if (funct7 != 7'b000_0000) $error("ERROR: Invalid funct7 for SLLW op, '%b'", funct7);
+              $display("SLLW r%0d, r%0d, r%0d", rd, rs1, rs2);
+            end
+            F3OP_SRXW: begin
+              if (funct7 == 7'b000_0000) $display("SRLW r%0d, r%0d, r%0d", rd, rs1, rs2);
+              else if (funct7 == 7'b010_0000) $display("SRAW r%0d, r%0d, r%0d", rd, rs1, rs2);
+              else $error("ERROR: Invalid funct7 for SRLW / SRAW op, '%b'", funct7);
+            end
+          endcase
+        end
       end 
 
       default: begin
