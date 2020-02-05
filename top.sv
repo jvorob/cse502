@@ -183,7 +183,6 @@ module top
         F3M_REMU   = 3'b111
     } Funct3_Mul;
     
-      
 
     // Values of F3 for fence instructions
     typedef enum bit[2:0] {
@@ -202,16 +201,19 @@ module top
         F3SYS_CSRRCI       = 3'b111
     } Funct3_System;
     
-    // Values of F3 for load instructions
+    // Values of F3 for load/store instructions
+    // byte, hword, word, dword
+    // default is sign-extend, U is zero-extend
     typedef enum bit[2:0] {
-        F3_LD       = 3'b011,
-        F3_LWU      = 3'b110
-    } Funct3_Load;
-
-    // Values of F3 for store instructions
-    typedef enum bit[2:0] {
-        F3_SD       = 3'b011
-    } Funct3_Store;
+        F3LS_B        = 3'b000,
+        F3LS_H        = 3'b001,
+        F3LS_W        = 3'b010,
+        F3LS_D        = 3'b011,
+        F3LS_BU       = 3'b100,
+        F3LS_HU       = 3'b101,
+        F3LS_WU       = 3'b110,
+        F3LS_DU       = 3'b111
+    } Funct3_LoadStore;
 
     logic [31:0] cur_inst;
 
@@ -326,18 +328,24 @@ module top
       // ===== Loads and stores
 
       OP_LOAD: begin
-        //TODO --Jan
         case (funct3) inside
-            F3_LWU:  $display("lwu r%0d, %0d(r%0d)", rd, immed_I, rs1);
-            F3_LD:   $display("ld r%0d, %0d(r%0d)", rd, immed_I, rs1);
-            default: $display("Invalid instruction for opcode=OP_LOAD.");
+            F3LS_B :  $display("lb  r%0d, %0d(r%0d)", rd, immed_I, rs1);
+            F3LS_H :  $display("lh  r%0d, %0d(r%0d)", rd, immed_I, rs1);
+            F3LS_W :  $display("lw  r%0d, %0d(r%0d)", rd, immed_I, rs1);
+            F3LS_D :  $display("ld  r%0d, %0d(r%0d)", rd, immed_I, rs1);
+            F3LS_BU:  $display("lbu r%0d, %0d(r%0d)", rd, immed_I, rs1);
+            F3LS_HU:  $display("lhu r%0d, %0d(r%0d)", rd, immed_I, rs1);
+            F3LS_WU:  $display("lwu r%0d, %0d(r%0d)", rd, immed_I, rs1);
+            default: $display("Invalid funct3 '%b' for opcode=OP_LOAD", funct3);
         endcase
       end
       OP_STORE: begin
-        //TODO --Jan
         case (funct3) inside
-            F3_SD: $display("sd r%0d, %0d(r%0d)", rs2, immed_S, rs1);
-            default: $display("Invalid instruction for opcode=OP_STORE.");
+            F3LS_B :  $display("sb  r%0d, %0d(r%0d)", rs2, immed_S, rs1);
+            F3LS_H :  $display("sh  r%0d, %0d(r%0d)", rs2, immed_S, rs1);
+            F3LS_W :  $display("sw  r%0d, %0d(r%0d)", rs2, immed_S, rs1);
+            F3LS_D :  $display("sd  r%0d, %0d(r%0d)", rs2, immed_S, rs1);
+            default: $display("Invalid funct3 '%b' for opcode=OP_STORE", funct3);
         endcase
       end
 
