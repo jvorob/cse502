@@ -148,21 +148,28 @@ module top
     } Opcode;
     
     
-    // Values of F3 for various ops
+    // Values of F3 for Integer Register-Register Operations
     typedef enum bit[2:0] {
-        F3OP_ADD //TODO
+        F3OP_ADD_SUB  = 3'b000,
+        F3OP_SLL      = 3'b001,
+        F3OP_SLT      = 3'b010,
+        F3OP_SLTU     = 3'b011,
+        F3OP_XOR      = 3'b100,
+        F3OP_SRX      = 3'b101, // SRL/SRA
+        F3OP_OR       = 3'b110,
+        F3OP_AND      = 3'b111
     } Funct3_Op;
     
     // Values of F3 for immediate ops
-    typedef enum bit[2:0] { //TODO --Jan
-        F3OPI_     = 3'b000,
-        F3OPI_SLLI = 3'b001,
-        F3OPI_     = 3'b010,
-        F3OPI_     = 3'b011,
-        F3OPI_     = 3'b100,
-        F3OPI_SRXI = 3'b101,
-        F30PI_     = 3'b110,
-        F3OPI_     = 3'b111
+    typedef enum bit[2:0] {
+        F3OPI_ADDI  = 3'b000,
+        F3OPI_SLLI  = 3'b001,
+        F3OPI_SLTI  = 3'b010,
+        F3OPI_SLTIU = 3'b011,
+        F3OPI_XORI  = 3'b100,
+        F3OPI_SRXI  = 3'b101, // SRL/SRA
+        F30PI_ORI   = 3'b110,
+        F3OPI_ANDI  = 3'b111
     } Funct3_iOp;
     
     // Values of F3 for branches
@@ -210,44 +217,32 @@ module top
         F3I64_SRXIW  = 3'b101
     } Funct3_RV64Iimm;
 
-    // Values of F3 for Integer Register-Register Operations
-    typedef enum bit[2:0] {
-        F3_ADD_SUB  = 3'b000;
-        F3_SLL      = 3'b001;
-        F3_SLT      = 3'b010;
-        F3_SLTU     = 3'b011;
-        F3_XOR      = 3'b100;
-        F3_SRX      = 3'b101;       // SRL/SRA
-        F3_OR       = 3'b110;
-        F3_AND      = 3'b111;
-    } Funct3_RV32I_RegReg;
-    
     // Values of F3 for fence instructions
     typedef enum bit[2:0] {
-        F3_FENCE    = 3'b000;
-        F3_FENCE_I  = 3'b001;
+        F3_FENCE    = 3'b000,
+        F3_FENCE_I  = 3'b001
     } Funct3_Fence;
     
     // Values of F3 for system instructions
     typedef enum bit[2:0] {
-        F3_ECALL_EBREAK = 3'b000;
-        F3_CSRRW        = 3'b001;
-        F3_CSRRS        = 3'b010;
-        F3_CSRRC        = 3'b011;
-        F3_CSRRWI       = 3'b101;
-        F3_CSRRSI       = 3'b110;
-        F3_CSRRCI       = 3'b111;
+        F3_ECALL_EBREAK = 3'b000,
+        F3_CSRRW        = 3'b001,
+        F3_CSRRS        = 3'b010,
+        F3_CSRRC        = 3'b011,
+        F3_CSRRWI       = 3'b101,
+        F3_CSRRSI       = 3'b110,
+        F3_CSRRCI       = 3'b111
     } Funct3_System;
     
     // Values of F3 for load instructions
     typedef enum bit[2:0] {
-        F3_LD       = 3'b011;
-        F3_LWU      = 3'b110;
+        F3_LD       = 3'b011,
+        F3_LWU      = 3'b110
     } Funct3_Load;
 
     // Values of F3 for store instructions
     typedef enum bit[2:0] {
-        F3_SD       = 3'011;
+        F3_SD       = 3'b011
     } Funct3_Store;
 
     logic [31:0] cur_inst;
@@ -358,6 +353,7 @@ module top
           end
         endcase
       end
+
       OP_LOAD: begin
         //TODO --Jan
         case (funct3) inside
@@ -373,6 +369,7 @@ module top
             default: $display("Invalid instruction for opcode=OP_STORE.");
         endcase
       end
+
       OP_OP_IMM: begin
         Funct3_iOp iOp_code = funct3;
         case (iOp_code) inside
@@ -391,27 +388,28 @@ module top
 
       OP_OP: begin
         if (funct7[0]) begin
-          if (funct7 != 7'b000_0001) $error("ERROR: Invalid funct7 for RV32M op, '%b'", funct7);
           Funct3_RV32M RV32M_code = funct3;
+          if (funct7 != 7'b000_0001) $error("ERROR: Invalid funct7 for RV32M op, '%b'", funct7);
+
           $display("RV32M op: %s r%0d, r%0d, r%0d", RV32M_code.name(), rd, rs1, rs2);
         end
         else if (funct7 == 7'b000_0000) begin
             case (funct3) inside
-                F3_ADD_SUB: $display("add r%0d, r%0d, r%0d", rd, rs1, rs2);
-                F3_SLL: $display("sll r%0d, r%0d, r%0d", rd, rs1, rs2);
-                F3_SLT: $display("slt r%0d, r%0d, r%0d", rd, rs1, rs2);
-                F3_SLTU: $display("sltu r%0d, r%0d, r%0d", rd, rs1, rs2);
-                F3_XOR: $display("xor r%0d, r%0d, r%0d", rd, rs1, rs2);
-                F3_SRX: $display("srl r%0d, r%0d, r%0d", rd, rs1, rs2);
-                F3_OR: $display("or r%0d, r%0d, r%0d", rd, rs1, rs2); 
-                F3_AND: $display("and r%0d, r%0d, r%0d", rd, rs1, rs2);
+                F3OP_ADD_SUB: $display("add r%0d, r%0d, r%0d", rd, rs1, rs2);
+                F3OP_SLL: $display("sll r%0d, r%0d, r%0d", rd, rs1, rs2);
+                F3OP_SLT: $display("slt r%0d, r%0d, r%0d", rd, rs1, rs2);
+                F3OP_SLTU: $display("sltu r%0d, r%0d, r%0d", rd, rs1, rs2);
+                F3OP_XOR: $display("xor r%0d, r%0d, r%0d", rd, rs1, rs2);
+                F3OP_SRX: $display("srl r%0d, r%0d, r%0d", rd, rs1, rs2);
+                F3OP_OR: $display("or r%0d, r%0d, r%0d", rd, rs1, rs2); 
+                F3OP_AND: $display("and r%0d, r%0d, r%0d", rd, rs1, rs2);
                 default: $display("Invalid instruction for opcode=OP_OP and funct7=7'b000_0000.");
             endcase
         end
         else if (funct7 == 7'b010_0000) begin
             case (funct3) inside
-                F3_ADD_SUB: $display("sub r%0d, r%0d, r%0d", rd, rs1, rs2);
-                F3_SRX: $display("sra r%0d, r%0d, r%0d", rd, rs1, rs2);
+                F3OP_ADD_SUB: $display("sub r%0d, r%0d, r%0d", rd, rs1, rs2);
+                F3OP_SRX: $display("sra r%0d, r%0d, r%0d", rd, rs1, rs2);
                 default: $display("Invalid instruction for opcode=OP_OP and funct7=7'b010_0000.");
             endcase 
         end
@@ -419,6 +417,7 @@ module top
             $display("Invalid instruction for opcode=OP_OP.");
         end
       end
+
       OP_IMM_32: begin
         Funct3_RV64Iimm RV64Iimm_code = funct3;
         case (RV64Iimm_code) inside
@@ -435,6 +434,7 @@ module top
           default: $error("ERROR: Invalid funct3 for 64-bit immediate op, '%b'", funct3);
         endcase
       end 
+
       OP_OP_32: begin
         if (funct7[0]) begin
           if (funct7 != 7'b000_0001) $error("ERROR: Invalid funct7 for RV64M op, '%b'", funct7);
@@ -471,7 +471,7 @@ module top
         end
         else if (rd == 0 && funct3 == F3_FENCE_I && rs1 == 0 && immed_I == 0) begin
             $display("fence.i");
-        else begin
+        end else begin
             $display("Invalid instruction for opcode=OP_MISC_MEM.");
         end
       end
