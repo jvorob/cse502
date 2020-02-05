@@ -329,17 +329,17 @@ module top
 
     case (op) inside
       OP_LUI: begin
-        $display("LUI 0x%x to r%0d'", immed_U, rd);
+        $display("lui, r%0d, 0x%x", rd, immed_U);
       end
       OP_AUIPC: begin
-        $display("AUIPC 0x%x to r%0d'", immed_U, rd);
+        $display("auipc r%d, 0x%x", rd, immed_U);
       end
       OP_JAL: begin
-        $display("JAL 0x%x, return addr in r%0d'", immed_UJ, rd);
+        $display("jal 0x%x, return addr in r%0d'", immed_UJ, rd);
       end
       OP_JALR: begin
         if (funct3 != 3'b000) $error("ERROR: Invalid funct3 for JALR op, '%b'", funct3);
-        $display("JALR r%0d+0x%x, return addr in r%0d'", rs1, immed_I, rd);
+        $display("jalr 0x%x(r%0d), return addr in r%0d'", immed_I, rs1, rd);
       end
 
       OP_BRANCH: begin
@@ -357,8 +357,8 @@ module top
       OP_LOAD: begin
         //TODO --Jan
         case (funct3) inside
-            F3_LWU: $display("lwu r%0d, %0d(r%0d)", rd, immed_I, rs1);
-            F3_LD: $display("ld r%0d, %0d(r%0d)", rd, immed_I, rs1);
+            F3_LWU:  $display("lwu r%0d, %0d(r%0d)", rd, immed_I, rs1);
+            F3_LD:   $display("ld r%0d, %0d(r%0d)", rd, immed_I, rs1);
             default: $display("Invalid instruction for opcode=OP_LOAD.");
         endcase
       end
@@ -382,28 +382,38 @@ module top
             else if (funct7[6:1] == 6'b01_0000) $display("SRAI r%0d, r%0d, shamt: 0x%x", rd, rs1, shamt);
             else $error("ERROR: Invalid funct7 for SRLI / SRAI op, '%b'", funct7[6:1]);
           end
-          //TODO --Jan
+
+          F3OP_ADD_SUB: $display("addi  r%0d, r%0d, 0x%x", rd, rs1, immed_I);
+          F3OP_SLT:     $display("slti  r%0d, r%0d, 0x%x", rd, rs1, immed_I);
+          F3OP_SLTU:    $display("sltiu r%0d, r%0d, 0x%x", rd, rs1, immed_I);
+          F3OP_XOR:     $display("xori  r%0d, r%0d, 0x%x", rd, rs1, immed_I);
+          F3OP_OR:      $display("ori   r%0d, r%0d, 0x%x", rd, rs1, immed_I); 
+          F3OP_AND:     $display("andi  r%0d, r%0d, 0x%x", rd, rs1, immed_I);
+
         endcase
       end
 
       OP_OP: begin
+        // Multiply-ops have funct7 = 000_0001
         if (funct7[0]) begin
           Funct3_RV32M RV32M_code = funct3;
           if (funct7 != 7'b000_0001) $error("ERROR: Invalid funct7 for RV32M op, '%b'", funct7);
 
           $display("RV32M op: %s r%0d, r%0d, r%0d", RV32M_code.name(), rd, rs1, rs2);
         end
+
+        // Normal ops have funct7 = 0?0_0000, funct7[5] set for sub, SRA
         else if (funct7 == 7'b000_0000) begin
             case (funct3) inside
                 F3OP_ADD_SUB: $display("add r%0d, r%0d, r%0d", rd, rs1, rs2);
-                F3OP_SLL: $display("sll r%0d, r%0d, r%0d", rd, rs1, rs2);
-                F3OP_SLT: $display("slt r%0d, r%0d, r%0d", rd, rs1, rs2);
-                F3OP_SLTU: $display("sltu r%0d, r%0d, r%0d", rd, rs1, rs2);
-                F3OP_XOR: $display("xor r%0d, r%0d, r%0d", rd, rs1, rs2);
-                F3OP_SRX: $display("srl r%0d, r%0d, r%0d", rd, rs1, rs2);
-                F3OP_OR: $display("or r%0d, r%0d, r%0d", rd, rs1, rs2); 
-                F3OP_AND: $display("and r%0d, r%0d, r%0d", rd, rs1, rs2);
-                default: $display("Invalid instruction for opcode=OP_OP and funct7=7'b000_0000.");
+                F3OP_SLL:     $display("sll r%0d, r%0d, r%0d", rd, rs1, rs2);
+                F3OP_SLT:     $display("slt r%0d, r%0d, r%0d", rd, rs1, rs2);
+                F3OP_SLTU:    $display("sltu r%0d, r%0d, r%0d", rd, rs1, rs2);
+                F3OP_XOR:     $display("xor r%0d, r%0d, r%0d", rd, rs1, rs2);
+                F3OP_SRX:     $display("srl r%0d, r%0d, r%0d", rd, rs1, rs2);
+                F3OP_OR:      $display("or r%0d, r%0d, r%0d", rd, rs1, rs2); 
+                F3OP_AND:     $display("and r%0d, r%0d, r%0d", rd, rs1, rs2);
+                default:      $display("Invalid instruction for opcode=OP_OP and funct7=7'b000_0000.");
             endcase
         end
         else if (funct7 == 7'b010_0000) begin
@@ -432,10 +442,12 @@ module top
             else $error("ERROR: Invalid funct7 for SRLIW / SRAIW op, '%b'", funct7);
           end
           default: $error("ERROR: Invalid funct3 for 64-bit immediate op, '%b'", funct3);
+          // -- TODO: there's a bunch more of these?
         endcase
       end 
 
       OP_OP_32: begin
+        // Multiply ops
         if (funct7[0]) begin
           if (funct7 != 7'b000_0001) $error("ERROR: Invalid funct7 for RV64M op, '%b'", funct7);
           case (funct3) inside
@@ -445,26 +457,31 @@ module top
             end
             default: $error("ERROR: Invalid funct3 for RV64M op, '%b'", funct3);
           endcase
+
+        // Normal ops
         end else begin
-          Funct3_Op64 Op64_code = funct3;
-          case (Op64_code) inside
+        Funct3_Op64 Op64_code = funct3;
+        case (Op64_code) inside
             F3OP_ADDW_SUBW: begin
-              if (funct7 == 7'b000_0000) $display("ADDW r%0d, r%0d, r%0d", rd, rs1, rs2);
-              else if (funct7 == 7'b010_0000) $display("SUBW r%0d, r%0d, r%0d", rd, rs1, rs2);
-              else $error("ERROR: Invalid funct7 for ADDW / SUBW op, '%b'", funct7);
+            if (funct7 == 7'b000_0000) $display("ADDW r%0d, r%0d, r%0d", rd, rs1, rs2);
+            else if (funct7 == 7'b010_0000) $display("SUBW r%0d, r%0d, r%0d", rd, rs1, rs2);
+            else $error("ERROR: Invalid funct7 for ADDW / SUBW op, '%b'", funct7);
             end
             F3OP_SLLW: begin
-              if (funct7 != 7'b000_0000) $error("ERROR: Invalid funct7 for SLLW op, '%b'", funct7);
-              $display("SLLW r%0d, r%0d, r%0d", rd, rs1, rs2);
+            if (funct7 != 7'b000_0000) $error("ERROR: Invalid funct7 for SLLW op, '%b'", funct7);
+            $display("SLLW r%0d, r%0d, r%0d", rd, rs1, rs2);
             end
             F3OP_SRXW: begin
-              if (funct7 == 7'b000_0000) $display("SRLW r%0d, r%0d, r%0d", rd, rs1, rs2);
-              else if (funct7 == 7'b010_0000) $display("SRAW r%0d, r%0d, r%0d", rd, rs1, rs2);
-              else $error("ERROR: Invalid funct7 for SRLW / SRAW op, '%b'", funct7);
+            if (funct7 == 7'b000_0000) $display("SRLW r%0d, r%0d, r%0d", rd, rs1, rs2);
+            else if (funct7 == 7'b010_0000) $display("SRAW r%0d, r%0d, r%0d", rd, rs1, rs2);
+            else $error("ERROR: Invalid funct7 for SRLW / SRAW op, '%b'", funct7);
             end
-          endcase
+            // -- TODO: there's a bunch more of these?
+        endcase
         end
       end
+
+
       OP_MISC_MEM: begin
         if (rd == 0 && funct3 == F3_FENCE && rs1 == 0 && immed_I[11:8] == 0) begin
             $display("fence pred=%0d, pred=%0d", immed_I[7:4], immed_I[3:0]);
@@ -475,6 +492,7 @@ module top
             $display("Invalid instruction for opcode=OP_MISC_MEM.");
         end
       end
+
       OP_SYSTEM: begin
         case (funct3) inside
             F3_ECALL_EBREAK: begin
