@@ -1,36 +1,8 @@
 `include "Sysbus.defs"
 `include "enums.sv"
 `include "decoder.sv"
-
-
-
-module RegFile
-(
-    input clk,
-    input [4:0] read_addr1,
-    input [4:0] read_addr2,
-    input [4:0] wb_addr,
-    input [63:0] wb_data,
-    input wb_en,
-    output [63:0] out1,
-    output [63:0] out2
-);
-
-endmodule
-
-module Alu
-(
-    input [63:0] a,         // rs1
-    input [63:0] b,         // rs2 or immediate
-    input [2:0] func3,
-    input [6:0] func7,
-    input [6:0] op,
-    output [63:0] result
-);
-
-
-endmodule
-
+`include "alu.sv"
+`include "regfile.sv"
 
 module top
 #(
