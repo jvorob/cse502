@@ -1,23 +1,8 @@
 `include "Sysbus.defs"
+`include "enums.sv"
+`include "decoder.sv"
 
 
-module Decoder
-(
-    input [31:0] inst,
-    output [4:0] rs1,
-    output [4:0] rs2,
-    output [4:0] rd,
-    output en_rs1,
-    output en_rs2,
-    output en_rd,
-    output [63:0] imm,
-    output [2:0] func3,
-    output [6:0] func7,
-    output [6:0] op
-);
-
-
-endmodule
 
 module RegFile
 (
@@ -105,118 +90,19 @@ module top
   input   wire [3:0]             m_axi_acsnoop
 );
 
-    logic [63:0] pc;
     logic [2:0] state;
+    logic [63:0] pc;
     logic [63:0] ir;
 
-    typedef enum bit[6:0] {
-        OP_LOAD       = 7'b0000011 ,
-        OP_LOAD_FP    = 7'b0000111 , // not used
-        OP_CUSTOM0    = 7'b0001011 , // not used
-        OP_MISC_MEM   = 7'b0001111 ,
-        OP_OP_IMM     = 7'b0010011 ,
-        OP_AUIPC      = 7'b0010111 ,
-        OP_IMM_32     = 7'b0011011 ,
-        OP_RSRVD1     = 7'b0011111 , // not used
-        
-        OP_STORE      = 7'b0100011 ,
-        OP_STORE_FP   = 7'b0100111 , // not used
-        OP_CUSTOM1    = 7'b0101011 , // not used
-        OP_AMO        = 7'b0101111 , // not used
-        OP_OP         = 7'b0110011 ,
-        OP_LUI        = 7'b0110111 ,
-        OP_OP_32      = 7'b0111011 ,
-        OP_RSRVD2     = 7'b0111111 , // not used
-        
-        OP_MADD       = 7'b1000011 , // not used
-        OP_MSUB       = 7'b1000111 , // not used
-        OP_NMSUB      = 7'b1001011 , // not used
-        OP_NMADD      = 7'b1001111 , // not used
-        OP_OP_FP      = 7'b1010011 , // not used
-        OP_RSRVD3     = 7'b1010111 , // not used
-        OP_CUSTOM2    = 7'b1011011 , // not used
-        OP_RSRVD4     = 7'b1011111 , // not used
-        
-        OP_BRANCH     = 7'b1100011 ,
-        OP_JALR       = 7'b1100111 ,
-        OP_RSRVD5     = 7'b1101011 ,
-        OP_JAL        = 7'b1101111 ,
-        OP_SYSTEM     = 7'b1110011 ,
-        OP_RSRVD6     = 7'b1110111 , // not used
-        OP_CUSTOM3    = 7'b1111011 , // not used
-        OP_RSRVD7     = 7'b1111111   // not used
-    } Opcode;
-    
-    // Values of F3 for branches
-    typedef enum bit[2:0] {
-        F3B_BEQ  = 3'b000,
-        F3B_BNE  = 3'b001,
-        F3B_BLT  = 3'b100,
-        F3B_BGE  = 3'b101,
-        F3B_BLTU = 3'b110,
-        F3B_BGEU = 3'b111
-    } Funct3_Branch;
 
-    // Values of F3 for most ALU ops
-    //  (same ones for for reg-reg, reg-imm, and -W versions of instruction)
-    typedef enum bit[2:0] {
-        F3OP_ADD_SUB  = 3'b000,
-        F3OP_SLL      = 3'b001,
-        F3OP_SLT      = 3'b010,
-        F3OP_SLTU     = 3'b011,
-        F3OP_XOR      = 3'b100,
-        F3OP_SRX      = 3'b101, // SRL/SRA
-        F3OP_OR       = 3'b110,
-        F3OP_AND      = 3'b111
-    } Funct3_Op;
-
-    
-    // Values of F3 for Mul ops (RV32M and RV64M)
-    typedef enum bit[2:0] {
-        F3M_MUL    = 3'b000,
-        F3M_MULH   = 3'b001,
-        F3M_MULHSU = 3'b010,
-        F3M_MULHU  = 3'b011,
-        F3M_DIV    = 3'b100,
-        F3M_DIVU   = 3'b101,
-        F3M_REM    = 3'b110,
-        F3M_REMU   = 3'b111
-    } Funct3_Mul;
-    
-
-    // Values of F3 for fence instructions
-    typedef enum bit[2:0] {
-        F3F_FENCE    = 3'b000,
-        F3F_FENCE_I  = 3'b001
-    } Funct3_Fence;
-    
-    // Values of F3 for system instructions
-    typedef enum bit[2:0] {
-        F3SYS_ECALL_EBREAK = 3'b000,
-        F3SYS_CSRRW        = 3'b001,
-        F3SYS_CSRRS        = 3'b010,
-        F3SYS_CSRRC        = 3'b011,
-        F3SYS_CSRRWI       = 3'b101,
-        F3SYS_CSRRSI       = 3'b110,
-        F3SYS_CSRRCI       = 3'b111
-    } Funct3_System;
-    
-    // Values of F3 for load/store instructions
-    // byte, hword, word, dword
-    // default is sign-extend, U is zero-extend
-    typedef enum bit[2:0] {
-        F3LS_B        = 3'b000,
-        F3LS_H        = 3'b001,
-        F3LS_W        = 3'b010,
-        F3LS_D        = 3'b011,
-        F3LS_BU       = 3'b100,
-        F3LS_HU       = 3'b101,
-        F3LS_WU       = 3'b110,
-        F3LS_DU       = 3'b111
-    } Funct3_LoadStore;
-
+    // Curr instruction going to decoder
     logic [31:0] cur_inst;
 
+    logic enable_execute; //set by state machine, is high for one clock for each instr
+    // until we have instruction cache, many clock cycles spent on AXI-fetch
+    // need to disa continuously execute current instr while waiting 
+
+    // Components decoded from cur_inst, set by decoder
     logic [4:0] rs1;
     logic [4:0] rs2;
     logic [4:0] rd;
@@ -224,8 +110,8 @@ module top
     logic en_rs2;
     logic en_rd;
     logic [63:0] imm;
-    logic [2:0] func3;
-    logic [6:0] func7;
+    logic [2:0] funct3;
+    logic [6:0] funct7;
     logic [6:0] op;
 
     Decoder d(
@@ -237,11 +123,14 @@ module top
         .en_rs2(en_rs2),
         .en_rd(en_rd),
         .imm(imm),
-        .func3(func3),
-        .func7(func7),
+        .funct3(funct3),
+        .funct7(funct7),
         .op(op)
     );
 
+
+
+    // Register file
     logic [63:0] out1;
     logic [63:0] out2;
 
@@ -268,266 +157,19 @@ module top
     );
 
 
-    function void decode(input logic[31:0] inst);
-
-    Opcode op = inst[6:0];
-
-    // There's 5 different kinds of immediates: I, S, SB, U, UJ
-    // NOTE: When immediates need to be sign-extended,
-    //       you can always take sign from inst[31]
-    logic [11:0]  immed_I  = inst[31:20];
-    logic [11:0]  immed_S  = { inst[31:                   25], inst[11:        7] };
-    logic [12:0]  immed_SB = { inst[31], inst[7], inst[30:25], inst[11:8],   1'b0 };
-    logic [31:0]  immed_U  = { inst[31:          12],                       12'b0 };
-    logic [20:0]  immed_UJ = { inst[31], inst[19:12], inst[20], inst[30:21], 1'b0 } ;
-
-    logic [4:0] rs1 = inst[19:15];
-    logic [4:0] rs2 = inst[24:20];
-    logic [4:0] rd  = inst[11: 7];
-    logic [2:0] funct3 = inst[14:12];
-    logic [6:0] funct7 = inst[31:25];
-    logic [5:0] shamt = inst[25:20];
-    logic [11:0] csr = inst[31:20];
-    logic [4:0] zimm = inst[19:15];
-    logic [3:0] pred = inst[27:24];
-    logic [3:0] succ = inst[23:20];
-
-
-
-    case (op) inside
-      OP_LUI: begin
-        $display("lui, r%0d, 0x%x", rd, immed_U);
-      end
-      OP_AUIPC: begin
-        $display("auipc r%d, 0x%x", rd, immed_U);
-      end
-      OP_JAL: begin
-        $display("jal 0x%x, return addr in r%0d'", immed_UJ, rd);
-      end
-      OP_JALR: begin
-        if (funct3 != 3'b000) $error("ERROR: Invalid funct3 for JALR op, '%b'", funct3);
-        $display("jalr 0x%x(r%0d), return addr in r%0d'", immed_I, rs1, rd);
-      end
-
-      OP_BRANCH: begin
-        case (funct3) inside
-          F3B_BEQ, F3B_BNE, F3B_BLT, F3B_BGE, F3B_BLTU, F3B_BGEU: begin
-            Funct3_Branch branch_code = funct3;
-            $display("Branch op: %s r%0d, r%0d, to 0x%x", branch_code.name, rs1, rs2, immed_SB);
-          end
-          default: begin
-            $error("ERROR: Invalid funct3 for BRANCH op, '%b'", funct3);
-          end
-        endcase
-      end
-
-
-      // ===== Loads and stores
-
-      OP_LOAD: begin
-        case (funct3) inside
-            F3LS_B :  $display("lb  r%0d, %0d(r%0d)", rd, immed_I, rs1);
-            F3LS_H :  $display("lh  r%0d, %0d(r%0d)", rd, immed_I, rs1);
-            F3LS_W :  $display("lw  r%0d, %0d(r%0d)", rd, immed_I, rs1);
-            F3LS_D :  $display("ld  r%0d, %0d(r%0d)", rd, immed_I, rs1);
-            F3LS_BU:  $display("lbu r%0d, %0d(r%0d)", rd, immed_I, rs1);
-            F3LS_HU:  $display("lhu r%0d, %0d(r%0d)", rd, immed_I, rs1);
-            F3LS_WU:  $display("lwu r%0d, %0d(r%0d)", rd, immed_I, rs1);
-            default: $display("Invalid funct3 '%b' for opcode=OP_LOAD", funct3);
-        endcase
-      end
-      OP_STORE: begin
-        case (funct3) inside
-            F3LS_B :  $display("sb  r%0d, %0d(r%0d)", rs2, immed_S, rs1);
-            F3LS_H :  $display("sh  r%0d, %0d(r%0d)", rs2, immed_S, rs1);
-            F3LS_W :  $display("sw  r%0d, %0d(r%0d)", rs2, immed_S, rs1);
-            F3LS_D :  $display("sd  r%0d, %0d(r%0d)", rs2, immed_S, rs1);
-            default: $display("Invalid funct3 '%b' for opcode=OP_STORE", funct3);
-        endcase
-      end
-
-
-      // ===== Main ALU OPs
-
-      OP_OP_IMM: begin
-        Funct3_Op f3op_code = funct3;
-        case (f3op_code) inside
-          F3OP_SLL: begin
-            if (funct7[6:1] != 6'b00_0000) $error("ERROR: Invalid funct7 for SLLI op, '%b'", funct7[6:1]);
-            $display("slli r%0d, r%0d, shamt: 0x%x", rd, rs1, shamt);
-          end
-          F3OP_SRX: begin
-            if (funct7[6:1] == 6'b00_0000)      $display("srli r%0d, r%0d, shamt: 0x%x", rd, rs1, shamt);
-            else if (funct7[6:1] == 6'b01_0000) $display("srai r%0d, r%0d, shamt: 0x%x", rd, rs1, shamt);
-            else $error("ERROR: Invalid funct7 for SRLI / SRAI op, '%b'", funct7[6:1]);
-          end
-
-          F3OP_ADD_SUB: $display("addi  r%0d, r%0d, 0x%x", rd, rs1, immed_I);
-          F3OP_SLT:     $display("slti  r%0d, r%0d, 0x%x", rd, rs1, immed_I);
-          F3OP_SLTU:    $display("sltiu r%0d, r%0d, 0x%x", rd, rs1, immed_I);
-          F3OP_XOR:     $display("xori  r%0d, r%0d, 0x%x", rd, rs1, immed_I);
-          F3OP_OR:      $display("ori   r%0d, r%0d, 0x%x", rd, rs1, immed_I); 
-          F3OP_AND:     $display("andi  r%0d, r%0d, 0x%x", rd, rs1, immed_I);
-
-        endcase
-      end
-
-      OP_OP: begin
-        // Multiply-ops have funct7 = 000_0001
-        if (funct7[0]) begin
-          Funct3_Mul mul_code = funct3;
-          if (funct7 != 7'b000_0001) $error("ERROR: Invalid funct7 for RV32M op, '%b'", funct7);
-
-          $display("RV32M op: %s r%0d, r%0d, r%0d", mul_code.name(), rd, rs1, rs2);
+    always_ff @ (posedge clk) begin
+        if (cur_inst == 0 && !reset) begin 
+            $finish;
         end
 
-        // Normal ops have funct7 = 0?0_0000, funct7[5] set for sub, SRA
-        else if (funct7 == 7'b000_0000) begin
-            case (funct3) inside
-                F3OP_ADD_SUB: $display("add r%0d, r%0d, r%0d", rd, rs1, rs2);
-                F3OP_SLL:     $display("sll r%0d, r%0d, r%0d", rd, rs1, rs2);
-                F3OP_SLT:     $display("slt r%0d, r%0d, r%0d", rd, rs1, rs2);
-                F3OP_SLTU:    $display("sltu r%0d, r%0d, r%0d", rd, rs1, rs2);
-                F3OP_XOR:     $display("xor r%0d, r%0d, r%0d", rd, rs1, rs2);
-                F3OP_SRX:     $display("srl r%0d, r%0d, r%0d", rd, rs1, rs2);
-                F3OP_OR:      $display("or r%0d, r%0d, r%0d", rd, rs1, rs2); 
-                F3OP_AND:     $display("and r%0d, r%0d, r%0d", rd, rs1, rs2);
-                default:      $display("Invalid funct3 '%b' for opcode=OP_OP and funct7=7'b000_0000.", funct3);
-            endcase
-        end
-        else if (funct7 == 7'b010_0000) begin
-            case (funct3) inside
-                F3OP_ADD_SUB: $display("sub r%0d, r%0d, r%0d", rd, rs1, rs2);
-                F3OP_SRX: $display("sra r%0d, r%0d, r%0d", rd, rs1, rs2);
-                default: $display("Invalid funct3 '%b' for opcode=OP_OP and funct7=7'b010_0000.", funct3);
-            endcase 
-        end
-        else begin
-            $display("Invalid funct3 '%b' for opcode=OP_OP.", funct3);
-        end
-      end
+    end
 
-      OP_IMM_32: begin
-        Funct3_Op f3op_code = funct3;
+    // === Main state machine
 
-        case (f3op_code) inside
-          F3OP_ADD_SUB: $display("addiw r%0d, r%0d, 0x%x", rd, rs1, immed_I);
-          F3OP_SLL: begin
-            if (funct7 != 7'b000_0000) $error("ERROR: Invalid funct7 for SLLIW op, '%b'", funct7);
-            $display("slliw r%0d, r%0d, shamt: 0x%x", rd, rs1, shamt[4:0]);
-          end
-          F3OP_SRX: begin
-            if (funct7 == 7'b000_0000)      $display("srliw r%0d, r%0d, shamt: 0x%x", rd, rs1, shamt[4:0]);
-            else if (funct7 == 7'b010_0000) $display("sraiw r%0d, r%0d, shamt: 0x%x", rd, rs1, shamt[4:0]);
-            else $error("ERROR: Invalid funct7 for SRLIW / SRAIW op, '%b'", funct7);
-          end
-          default: $error("ERROR: Invalid funct3 for 64-bit immediate op, '%b'", funct3);
-          // -- TODO: there's a bunch more of these?
-        endcase
-      end 
-
-      OP_OP_32: begin
-        // Multiply ops
-        if (funct7[0]) begin
-          if (funct7 != 7'b000_0001) $error("ERROR: Invalid funct7 for RV64M op, '%b'", funct7);
-          case (funct3) inside
-            F3M_MUL, F3M_DIV, F3M_DIVU, F3M_REM, F3M_REMU: begin
-              Funct3_Mul mul_code = funct3;
-              $display("RV64M op: %sW,  r%0d, r%0d, r%0d", mul_code.name(), rd, rs1, rs2);
-            end
-            default: $error("ERROR: Invalid funct3 for RV64M op, '%b'", funct3);
-          endcase
-
-        // Normal ops
-        end else begin
-        Funct3_Op f3op_code = funct3;
-        case (f3op_code) inside
-            F3OP_ADD_SUB: begin
-            if (funct7 == 7'b000_0000) $display("addw r%0d, r%0d, r%0d", rd, rs1, rs2);
-            else if (funct7 == 7'b010_0000) $display("subw r%0d, r%0d, r%0d", rd, rs1, rs2);
-            else $error("ERROR: Invalid funct7 for ADDW / SUBW op, '%b'", funct7);
-            end
-            F3OP_SLL: begin
-            if (funct7 != 7'b000_0000) $error("ERROR: Invalid funct7 for SLLW op, '%b'", funct7);
-            $display("sllw r%0d, r%0d, r%0d", rd, rs1, rs2);
-            end
-            F3OP_SRX: begin
-            if (funct7 == 7'b000_0000) $display("SRLW r%0d, r%0d, r%0d", rd, rs1, rs2);
-            else if (funct7 == 7'b010_0000) $display("SRAW r%0d, r%0d, r%0d", rd, rs1, rs2);
-            else $error("ERROR: Invalid funct7 for SRLW / SRAW op, '%b'", funct7);
-            end
-            // -- TODO: there's a bunch more of these?
-        endcase
-        end
-      end
-
-      // ===== Misc Ops (mem, system)
-
-      OP_MISC_MEM: begin
-        if (rd == 0 && funct3 == F3F_FENCE && rs1 == 0 && immed_I[11:8] == 0) begin
-            $display("fence pred=%0d, pred=%0d", immed_I[7:4], immed_I[3:0]);
-        end
-        else if (rd == 0 && funct3 == F3F_FENCE_I && rs1 == 0 && immed_I == 0) begin
-            $display("fence.i");
-        end else begin
-            $display("Invalid instruction for opcode=OP_MISC_MEM.");
-        end
-      end
-
-      OP_SYSTEM: begin
-        case (funct3) inside
-            F3SYS_ECALL_EBREAK: begin
-                if (immed_I[0] == 0)
-                    $display("ecall");
-                else if (immed_I[0] == 1)
-                    $display("ebreak");
-                else
-                    $display("Invalid instruction for opcode=OP_SYSTEM and funct3=F3_ECALL_EBREAK.");
-            end
-            F3SYS_CSRRW: begin
-                $display("csrrw rd=r%0d, rs1=r%0d, csr=r%0d", rd, rs1, csr);
-            end
-            F3SYS_CSRRS: begin
-                $display("csrrs rd=r%0d, rs1=r%0d, csr=r%0d", rd, rs1, csr);
-            end
-            F3SYS_CSRRC: begin
-                $display("csrrc rd=r%0d, rs1=r%0d, csr=r%0d", rd, rs1, csr);
-            end
-            F3SYS_CSRRWI: begin
-                $display("csrrw rd=r%0d, zimm=r%0d, csr=r%0d", rd, zimm, csr);
-            end
-            F3SYS_CSRRSI: begin
-                $display("csrrw rd=r%0d, zimm=r%0d, csr=r%0d", rd, zimm, csr);
-            end
-            F3SYS_CSRRCI: begin
-                $display("csrrw rd=r%0d, zimm=r%0d, csr=r%0d", rd, zimm, csr);
-            end
-            default: $display("Invalid instruction for opcode=OP_SYSTEM.");
-        endcase
-      end
-
-
-      default: begin
-        $display("\n");
-        $display("Decoding instruction %b ", inst);
-
-        $display("Not recognized instruction.");
-        $display("got opcode %s ('%b\')", op.name(), op);
-
-        $display(" I-Immed is %x (%b)", immed_I, immed_I);
-        $display(" S-Immed is %x (%b)", immed_S, immed_S);
-        $display("SB-Immed is %x (%b)", immed_SB, immed_SB);
-        $display(" U-Immed is %x (%b)", immed_U, immed_U);
-        $display("UJ-Immed is %x (%b)", immed_UJ, immed_UJ);
-      end
-    endcase
-
-
-    endfunction
-
-
-  always_ff @ (posedge clk) begin
+    always_ff @ (posedge clk) begin
         if (reset) begin
+            cur_inst <= -1; // we exit when this is 0000, so start at FFFF
+
             state <= 3'h0;
             pc <= entry;
             m_axi_arid <= 0;      // master id
@@ -566,11 +208,11 @@ module top
                 end
             end
             3'h3: begin // Read done, decode low
-                decode(ir[31:0]);
+                cur_inst <= ir[31:0];
                 state <= 3'h4;
             end
             3'h4: begin // Decode hi
-                decode(ir[63:32]);
+                cur_inst <= ir[63:32];
                 state <= 3'h0;
             end
             default: state <= 3'h0;
