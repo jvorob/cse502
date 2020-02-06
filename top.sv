@@ -130,13 +130,19 @@ module top
         .func3(func3),
         .func7(func7),
         .op(op),
-        //.result(alu_out) //TEMP TODO JAN: so we can see if writeback to reg file works
+        .result(alu_out)
     );
-    assign alu_out = rs1; //TEMP TODO JAN: writeback to reg file
 
 
+    // === Run until we hit a 0x0000_0000 instruction
     always_ff @ (posedge clk) begin
         if (cur_inst == 0 && !reset) begin 
+            $display("===== Program terminated =====");
+            $display("    PC = 0x%0x", pc);
+            for(int i = 0; i < 32; i++)
+                $display("    r%2.2d: %10d (0x%x)", i, rf.regs[i], rf.regs[i]);
+            
+
             $finish;
         end
 
