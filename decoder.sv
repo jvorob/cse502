@@ -24,17 +24,18 @@ module Decoder
 
 
     // Immediate versions (will be muxed depending on opcode)
-    logic [11:0]  immed_I ;
-    logic [11:0]  immed_S ;
-    logic [12:0]  immed_SB;
-    logic [31:0]  immed_U ;
-    logic [20:0]  immed_UJ;
+    logic [63:0]  immed_I ; //12 bits in opcode (then sign-extend the rest)
+    logic [63:0]  immed_S ; //12 bits 
+    logic [63:0]  immed_SB; //13 bits 
+    logic [63:0]  immed_U ; //32 bits 
+    logic [63:0]  immed_UJ; //20 bits 
 
-    assign  immed_I  = inst[31:20];
-    assign  immed_S  = { inst[31:                   25], inst[11:        7] };
-    assign  immed_SB = { inst[31], inst[7], inst[30:25], inst[11:8],   1'b0 };
-    assign  immed_U  = { inst[31:          12],                       12'b0 };
-    assign  immed_UJ = { inst[31], inst[19:12], inst[20], inst[30:21], 1'b0 } ;
+    // Construct these by sign-extending the top, then unscrambling the rest of it
+    assign  immed_I  = { {52{inst[31]}}, inst[31:20]};
+    assign  immed_S  = { {52{inst[31]}}, inst[31:                   25], inst[11:        7] };
+    assign  immed_SB = { {51{inst[31]}}, inst[31], inst[7], inst[30:25], inst[11:8],   1'b0 };
+    assign  immed_U  = { {32{inst[31]}}, inst[31:          12],                       12'b0 };
+    assign  immed_UJ = { {44{inst[31]}}, inst[31], inst[19:12], inst[20], inst[30:21], 1'b0 } ;
 
 
     // internal instruction fragments
@@ -58,9 +59,61 @@ module Decoder
     assign succ   = inst[23:20];
 
 
-
     always_comb @(inst) begin
         Opcode op_code = inst[6:0];
+        case (op_code) inside
+            // == Unusual immeds: U UJ S SB
+            OP_LUI, OP_AUIPC: begin
+                imm = immed_U;
+                {en_rs1, en_rs2, en_rd } = 3'b001; // imm -> dest reg
+            end
+
+            // JUMPS
+            OP_JAL: begin
+                imm = immed_UJ;
+                {en_rs1, en_rs2, en_rd } = 3'b001; // only return addr
+            end
+            OP_JALR: begin
+                imm = immed_I;
+                {en_rs1, en_rs2, en_rd } = 3'b101; // src reg  + return addr
+            end
+
+            OP_BRANCH: begin
+                imm = immed_SB;
+                {en_rs1, en_rs2, en_rd } = 3'b110; // test regs
+            end
+
+            // === Load/Store
+            OP_LOAD: begin
+                imm = immed_I;
+                {en_rs1, en_rs2, en_rd } = 3'b101; // src mem + dest reg
+            end
+
+            OP_STORE: begin
+                imm = immed_S;
+                {en_rs1, en_rs2, en_rd } = 3'b110; // 2 src mem addr
+            end
+
+            // == I-type
+            OP_OP_IMM, OP_IMM_32: begin
+                imm = immed_I;
+                {en_rs1, en_rs2, en_rd } = 3'b101; //no rs2
+            end
+
+            OP_OP, OP_OP_32: begin
+                imm = 0; //doesn't use it
+                {en_rs1, en_rs2, en_rd } = 3'b111; //uses all regs
+            end
+
+
+            // ==== ETC: We dont want to implement these rn
+
+            OP_MISC_MEM, OP_SYSTEM: begin
+                imm = 0; // Might need to change this
+                {en_rs1, en_rs2, en_rd } = 3'b000; // I think this is right?
+            end
+
+        endcase
     end
 
 
