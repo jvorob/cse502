@@ -108,6 +108,7 @@ module top
 
     RegFile rf(
         .clk(clk),
+        .reset(reset),
         .read_addr1(rs1),
         .read_addr2(rs2),
         .wb_addr(rd),
