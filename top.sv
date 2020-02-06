@@ -106,6 +106,9 @@ module top
     logic [63:0] out1;
     logic [63:0] out2;
 
+    logic writeback_en; // enables writeback to regfile
+    assign writeback_en = en_rd && enable_execute; // if curr op had a dest reg
+
     RegFile rf(
         .clk(clk),
         .reset(reset),
@@ -113,12 +116,13 @@ module top
         .read_addr2(rs2),
         .wb_addr(rd),
         .wb_data(alu_out),
-        .wb_en(en_rd),              // still needs to be modified
+        .wb_en(writeback_en),
         .out1(out1),
         .out2(out2)
     );
     
     logic [63:0] alu_out;
+
 
     Alu a(
         .a(out1),
@@ -126,8 +130,9 @@ module top
         .func3(func3),
         .func7(func7),
         .op(op),
-        .result(alu_out)
+        //.result(alu_out) //TEMP TODO JAN: so we can see if writeback to reg file works
     );
+    assign alu_out = rs1; //TEMP TODO JAN: writeback to reg file
 
 
     always_ff @ (posedge clk) begin
@@ -145,6 +150,9 @@ module top
 
             state <= 3'h0;
             pc <= entry;
+
+            enable_execute <= 0;
+
             m_axi_arid <= 0;      // master id
             m_axi_arlen <= 8'h7;  // +1, =8 words requested
             m_axi_arsize <= 3'h3; // 2^3, word width is 8 bytes
@@ -157,6 +165,7 @@ module top
         end else begin
             case(state)
             3'h0: begin  // Start Read
+
                 if(!m_axi_arready || !m_axi_arvalid) begin
                     // It's addressed by bytes, even though you don't get full granularity at byte level
                     m_axi_araddr <= pc[63:0];
@@ -167,6 +176,8 @@ module top
                     m_axi_arvalid <= 1'b0;
                     state <= 3'h1;
                 end
+
+                enable_execute <= 0;
             end
             3'h1: begin // Address Accepted / Awaiting Read Valid
                 if(m_axi_rvalid) begin
@@ -183,10 +194,15 @@ module top
             3'h3: begin // Read done, decode low
                 cur_inst <= ir[31:0];
                 state <= 3'h4;
+                enable_execute <= 1; //UGH this is really gross, 
+                // we should move to the state-machine style where all effects
+                // are combinational, based on the current state, not latched
+                // at state transitions. TODO --Jan
             end
             3'h4: begin // Decode hi
                 cur_inst <= ir[63:32];
                 state <= 3'h0;
+                enable_execute <= 1;
             end
             default: state <= 3'h0;
             endcase
