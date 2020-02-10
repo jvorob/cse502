@@ -63,11 +63,12 @@ module top
 );
 
     logic [2:0] state;
-    logic [63:0] pc;
+    logic [63:0] sm_pc; //PC of axi-fetching state machine
     logic [63:0] ir;
 
 
-    // Curr instruction going to decoder
+    // Curr instruction and PC going to decoder
+    logic [63:0] pc;
     logic [31:0] cur_inst;
 
     logic enable_execute; //set by state machine, is high for one clock for each instr
@@ -86,6 +87,12 @@ module top
     logic [6:0] funct7;
     logic [6:0] op;
 
+    // Special signals
+    logic keep_pc_plus_immed; //(for AUIPC, we already have a separate PC+(...) adder
+    // need to mux that into exec-stage output
+
+    logic use_immed_alu;// (ALU input B should be immed, not rs2)
+
     Decoder d(
         .inst(cur_inst),
         .rs1(rs1),
@@ -97,7 +104,10 @@ module top
         .imm(imm),
         .funct3(funct3),
         .funct7(funct7),
-        .op(op)
+        .op(op),
+
+        .use_immed_alu,
+        .keep_pc_plus_immed
     );
 
 
@@ -115,24 +125,33 @@ module top
         .read_addr1(rs1),
         .read_addr2(rs2),
         .wb_addr(rd),
-        .wb_data(alu_out),
+        .wb_data(exec_result),
         .wb_en(writeback_en),
         .out1(out1),
         .out2(out2)
     );
     
-    logic [63:0] alu_out;
 
+    // == ALU signals
+    logic [63:0] alu_out;
+    logic alu_b_input;
+    assign alu_b_input = use_immed_alu ? imm : out2;
 
     Alu a(
         .a(out1),
-        .b(out2),
+        .b(alu_b_input),
         .func3(func3),
         .func7(func7),
         .op(op),
+
         .result(alu_out)
     );
 
+    // == Final stage / Writeback:
+    logic [63:0] exec_result;
+
+    //TODO: this won't be correct because this isn't the instruction's PC, it's the state machine's
+    assign exec_result = keep_pc_plus_immed ? pc + imm : alu_out;
 
     // === Run until we hit a 0x0000_0000 instruction
     always_ff @ (posedge clk) begin
@@ -155,7 +174,7 @@ module top
             cur_inst <= -1; // we exit when this is 0000, so start at FFFF
 
             state <= 3'h0;
-            pc <= entry;
+            sm_pc <= entry;
 
             enable_execute <= 0;
 
@@ -174,10 +193,10 @@ module top
 
                 if(!m_axi_arready || !m_axi_arvalid) begin
                     // It's addressed by bytes, even though you don't get full granularity at byte level
-                    m_axi_araddr <= pc[63:0];
+                    m_axi_araddr <= sm_pc[63:0];
                     m_axi_arvalid <= 1'b1;
                 end else begin
-                    pc <= pc + 64'h8;
+                    sm_pc <= sm_pc + 64'h8;
                     m_axi_rready <= 1'b1;
                     m_axi_arvalid <= 1'b0;
                     state <= 3'h1;
@@ -199,6 +218,7 @@ module top
             end
             3'h3: begin // Read done, decode low
                 cur_inst <= ir[31:0];
+                pc <= sm_pc - 8;
                 state <= 3'h4;
                 enable_execute <= 1; //UGH this is really gross, 
                 // we should move to the state-machine style where all effects
@@ -207,6 +227,7 @@ module top
             end
             3'h4: begin // Decode hi
                 cur_inst <= ir[63:32];
+                pc <= sm_pc - 16;
                 state <= 3'h0;
                 enable_execute <= 1;
             end
