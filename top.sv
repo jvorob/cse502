@@ -134,7 +134,7 @@ module top
 
     // == ALU signals
     logic [63:0] alu_out;
-    logic alu_b_input;
+    logic [63:0] alu_b_input;
     assign alu_b_input = use_immed_alu ? imm : out2;
 
     Alu a(
@@ -227,7 +227,7 @@ module top
             end
             3'h4: begin // Decode hi
                 cur_inst <= ir[63:32];
-                pc <= sm_pc - 16;
+                pc <= sm_pc - 4;
                 state <= 3'h0;
                 enable_execute <= 1;
             end
