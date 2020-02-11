@@ -3,6 +3,8 @@
 `include "decoder.sv"
 `include "alu.sv"
 `include "regfile.sv"
+`include "pipe_reg.sv"
+`include "hazard.sv"
 
 module top
 #(
@@ -66,7 +68,6 @@ module top
     logic [63:0] sm_pc; //PC of axi-fetching state machine
     logic [63:0] ir;
 
-
     // Curr instruction and PC going to decoder
     logic [63:0] pc;
     logic [31:0] cur_inst;
@@ -74,6 +75,24 @@ module top
     logic enable_execute; //set by state machine, is high for one clock for each instr
     // until we have instruction cache, many clock cycles spent on AXI-fetch
     // need to disa continuously execute current instr while waiting 
+
+
+    // ------------------------BEGIN IF STAGE--------------------------
+
+
+
+
+    // ------------------------END IF STAGE----------------------------
+
+    if_id_reg if_id(
+        .clk(clk),
+        .reset(reset),
+        .stall(),
+        .in_inst(),
+        .out_inst()
+    );
+
+    // ------------------------BEGIN ID STAGE--------------------------
 
     // Components decoded from cur_inst, set by decoder
     logic [4:0] rs1;
@@ -109,13 +128,10 @@ module top
         .use_immed_alu,
         .keep_pc_plus_immed
     );
-
-
-
+    
     // Register file
     logic [63:0] out1;
     logic [63:0] out2;
-
     logic writeback_en; // enables writeback to regfile
     assign writeback_en = en_rd && enable_execute; // if curr op had a dest reg
 
@@ -131,6 +147,16 @@ module top
         .out2(out2)
     );
     
+    // -----------------------END ID STAGE------------------------------
+
+    id_ex_reg id_ex(
+        .clk(clk),
+        .reset(reset),
+        .stall(),
+        .funct3()
+    );
+
+    // -----------------------BEGIN EX STAGE----------------------------
 
     // == ALU signals
     logic [63:0] alu_out;
@@ -140,18 +166,56 @@ module top
     Alu a(
         .a(out1),
         .b(alu_b_input),
-        .func3(func3),
-        .func7(func7),
+        .func3(funct3),
+        .func7(funct7),
         .op(op),
 
         .result(alu_out)
     );
 
-    // == Final stage / Writeback:
+    // ------------------------END EX STAGE-----------------------------
+
+    ex_mem_reg ex_mem(
+        .clk(clk),
+        .reset(reset),
+        .stall(),
+        .in_alu_result(),
+        .out_alu_result()
+    );
+
+    // ------------------------BEGIN MEM STAGE--------------------------
+
+    // ------------------------END MEM STAGE----------------------------
+
+    mem_wb_reg mem_wb(
+        .clk(clk),
+        .reset(reset),
+        .stall(),
+        .in_mem_result(),
+        .in_rd(),
+        .in_en_rd(),
+        .out_mem_result(),
+        .out_rd(),
+        .out_en_rd()
+    );
+
+    // ------------------------BEGIN WB STAGE---------------------------
     logic [63:0] exec_result;
 
     //TODO: this won't be correct because this isn't the instruction's PC, it's the state machine's
     assign exec_result = keep_pc_plus_immed ? pc + imm : alu_out;
+
+    // ------------------------END WB STAGE-----------------------------
+    
+
+    // -------Modules outside of pipeline (e.g. hazard detection)-------
+    hazard_unit haz(
+        .clk(clk),
+        .hazard()
+    );
+
+
+
 
     // === Run until we hit a 0x0000_0000 instruction
     always_ff @ (posedge clk) begin
@@ -164,7 +228,6 @@ module top
 
             $finish;
         end
-
     end
 
     // === Main state machine
