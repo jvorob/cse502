@@ -166,8 +166,8 @@ module top
     Alu a(
         .a(out1),
         .b(alu_b_input),
-        .func3(funct3),
-        .func7(funct7),
+        .funct3(funct3),
+        .funct7(funct7),
         .op(op),
 
         .result(alu_out)
