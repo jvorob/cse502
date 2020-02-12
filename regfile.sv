@@ -22,7 +22,10 @@ module RegFile
             for (i = 0; i < 32; i = i + 1)
                 regs[i] <= 64'h0000_0000_0000_0000;
         else if (wb_en)
-            regs[wb_addr] <= wb_data;
+            if (wb_addr == 0)
+                regs[wb_addr] <= 0; // not actually needed, but it makes debugging a little cleaner
+            else
+                regs[wb_addr] <= wb_data;
     end
 
 endmodule
