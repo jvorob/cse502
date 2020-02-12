@@ -113,6 +113,9 @@ module top
     logic alu_use_immed;// (ALU input B should be immed, not rs2)
     logic alu_width_32; // (-W Op)
 
+    Jump_Code jump_if;
+    logic jump_absolute;
+
     Decoder d(
         .inst(cur_inst),
         .rs1(rs1),
@@ -127,7 +130,14 @@ module top
         .op(op),
 
         .alu_use_immed,
+        .alu_width_32,
+
+        .jump_if,
+        .jump_absolute,
+
         .keep_pc_plus_immed
+
+
     );
     
     // Register file
@@ -186,6 +196,24 @@ module top
         .out_alu_result()
     );
 
+
+    // Jump logic
+    logic [63:0] jump_target_address;
+    logic do_jump;
+
+    // mask off bottommost bit of jump target: (according to RISCV spec)
+    assign jump_target_address = (jump_absolute ? alu_out : pc + imm) & ~64'b1;
+
+    always_comb begin
+        case (jump_if) inside
+            JUMP_NO:      do_jump = 0;
+            JUMP_YES:     do_jump = 1;
+            JUMP_ALU_EQZ: do_jump = (alu_out == 0);
+            JUMP_ALU_NEZ: do_jump = (alu_out != 0);
+        endcase
+    end
+
+
     // ------------------------BEGIN MEM STAGE--------------------------
 
     // ------------------------END MEM STAGE----------------------------
@@ -221,6 +249,11 @@ module top
     assign enable_execute = icache_valid;
 
     always_ff @ (posedge clk) begin
+        if (sm_pc[1:0] != 2'b00) 
+            $error("ERROR: executing unaligned instruction at PC=%x", sm_pc);
+    end
+
+    always_ff @ (posedge clk) begin
         if (reset)
             sm_pc <= entry;
         else if (icache_valid) begin
@@ -233,8 +266,13 @@ module top
 
                 $finish;
             end
-            else
-                sm_pc <= sm_pc + 64'h4;
+            else begin
+                if (do_jump) begin
+                    sm_pc <= jump_target_address;
+                end else begin
+                    sm_pc <= sm_pc + 64'h4;
+                end
+            end
         end
     end
 

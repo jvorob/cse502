@@ -5,6 +5,28 @@
 // are prefixed (F3OP for ops, F3B for branches, etc)
 
 
+// =============================================
+//
+//             INTERNAL CODES ENUMS
+//
+// =============================================
+
+
+// == Enables branch, conditionally or unconditionally
+typedef enum bit[1:0] {
+    JUMP_NO      = 2'b00,
+    JUMP_YES     = 2'b01,
+    JUMP_ALU_EQZ = 2'b10,
+    JUMP_ALU_NEZ = 2'b11
+} Jump_Code;
+
+
+// =============================================
+//
+//           INSTRUCTION DECODING ENUMS
+
+// =============================================
+
 typedef enum bit[6:0] {
     OP_LOAD       = 7'b0000011 ,
     OP_LOAD_FP    = 7'b0000111 , // not used

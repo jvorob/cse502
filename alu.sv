@@ -36,12 +36,11 @@ module Alu
                             if (funct7[5]) begin //SUB
                                 result = a - b;
                             end else begin //ADD
-                                $display("Subtracting yaaay");
                                 result = a + b;
                             end
                         end
                         F3OP_SLL:  result = a << b[5:0];
-                        F3OP_SLT:  result = $signed(a) < $signed(b) ? 1 : 0;
+                        F3OP_SLT:  result = (a_sig < b_sig) ? 1 : 0;
                         F3OP_SLTU: result = a < b ? 1 : 0;
                         F3OP_XOR:  result = a ^ b;
                         F3OP_SRX: begin

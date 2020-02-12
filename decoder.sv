@@ -47,7 +47,10 @@ module Decoder
     // == Other codes
     output keep_pc_plus_immed, //(for AUIPC, we already have a separate PC+(...) adder, just shove that into exec result
     output alu_use_immed, // (ALU input B shoould b immed, not rs2)
-    output alu_width_32  // Tell ALU it's a 32bit op (ADDW, MULW, etc)
+    output alu_width_32, // Tell ALU it's a 32bit op (ADDW, MULW, etc)
+
+    output Jump_Code jump_if, // under what conditions do we jump? (always, ALU 1, etc
+    output jump_absolute // JAL/Branches are PC-relative (jumpt to imm+PC), JALR is absolute (jump to ALU-result)
 
 );
 
@@ -76,6 +79,11 @@ module Decoder
     logic [3:0] succ  ;
 
 
+    assign shamt  = inst[25:20];
+    assign csr    = inst[31:20];
+    assign zimm   = inst[19:15];
+    assign pred   = inst[27:24];
+    assign succ   = inst[23:20];
 
 
 
@@ -91,13 +99,6 @@ module Decoder
         assign funct3 = inst[14:12]; //TODO: override these for certain instructions
         assign funct7 = inst[31:25]; // branches, adds, etc
 
-        assign shamt  = inst[25:20];
-        assign csr    = inst[31:20];
-        assign zimm   = inst[19:15];
-        assign pred   = inst[27:24];
-        assign succ   = inst[23:20];
-
-
         // ====== SPECIAL SIGNALS
         
         //(for AUIPC, we already compute ALU_result+PC, mux that into exec-stage result)
@@ -106,13 +107,13 @@ module Decoder
         assign alu_use_immed = 0; //inst[6:0] inside{OP_OP_IMM, OP_IMM_32, OP_LOAD, OP_STORE, OP_JAL, OP_JALR};
         assign alu_width_32 = 0;
 
+        assign jump_if = JUMP_NO;
+        assign jump_absolute = 0; // JAL and Branches are PC-relative, JALR is absolute
 
-        //TODO: special codes:
-        // - Jump/Branch codes
-        // - for mem ops, need to pass rs2 or immed or whichever through
-        //   non-alu path?
         // - MISC_MEM: ??? TODO
         // - SYSTEM: ??? TODO
+        // - for mem ops, need to pass rs2 or immed or whichever through
+        //   non-alu path?
 
         // === MAIN DECODER:
         // Determine immediate values, and which of rs1,rs2,and rd we're using
@@ -139,7 +140,10 @@ module Decoder
                 funct3 = F3OP_ADD_SUB; //ALU does 0+immed
 
                 {en_rs1, en_rs2, en_rd } = 3'b101; // src reg + return addr
-                //TODO set jump_if and jump_to
+
+                // == Set signals to jump unconditionally to ALU result (rs1 + imm)
+                jump_if = JUMP_YES;
+                jump_absolute = 1; //Use ALU Result
             end
             OP_JAL: begin
                 imm = immed_UJ;
@@ -149,17 +153,44 @@ module Decoder
                 funct3 = F3OP_ADD_SUB; //ALU does 0+immed
 
                 {en_rs1, en_rs2, en_rd } = 3'b001; // only return addr
-                //TODO set jump_if and jump_to
+
+                // == Set signals to jump unconditionally, pc-relative
+                jump_if = JUMP_YES;
+                jump_absolute = 0; // jumps to PC+imm
             end
 
             // == Branches
             OP_BRANCH: begin
                 imm = immed_SB;
-                // ALU does rs1 comp rs2
-                funct7 = 0; //TODO: this will depend on stuff
+                funct7 = 7'b000_0000;  //zero this unless we're doing something weird
                 {en_rs1, en_rs2, en_rd } = 3'b110; // test regs
-                //TODO: set alu codes
-                //TODO: set jump_if and jump_to
+
+
+                // == Set when to jump
+                jump_absolute = 0; // always jumps to PC+imm
+                case (funct3) inside
+                    F3B_BEQ: jump_if = JUMP_ALU_EQZ; //if difference is 0, theyre equal
+                    F3B_BNE: jump_if = JUMP_ALU_NEZ;
+
+                    F3B_BLT, F3B_BLTU: jump_if = JUMP_ALU_NEZ; // SLT, if lt ALU will be 1
+                    F3B_BGE, F3B_BGEU: jump_if = JUMP_ALU_EQZ; // if ALU=0, then it's NOT less than
+
+                    default: $error("ERROR: INVALID FUNCT3 '%b' FOR BRANCH OP", funct3);
+                endcase
+                
+                // == Set which OP Alu should do
+                // ALU does rs1 comp rs2
+                case (funct3) inside
+                    F3B_BEQ, F3B_BNE: begin
+                        funct7 = 7'b010_0000; 
+                        funct3 = F3OP_ADD_SUB; //SUB (careful, we're using this as both input for decoder and output to ALU)
+                    end
+                    F3B_BLT, F3B_BGE: funct3 = F3OP_SLT;
+                    F3B_BLTU, F3B_BGEU: funct3 = F3OP_SLTU;
+
+                    default: $error("ERROR: INVALID FUNCT3 '%b' FOR BRANCH OP", funct3);
+                endcase
+
             end
 
             // === Load/Store
