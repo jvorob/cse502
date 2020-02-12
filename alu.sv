@@ -269,7 +269,7 @@ module Alu
                         // of the instruction names (e.g. MULW, DIVW, ...)
                         F3M_MUL: begin
                             product = a_sig[31:0] * b_sig[31:0];
-                            result = { { 32{product[31:0]} }, product[31:0] };
+                            result = { { 32{product[31]} }, product[31:0] };
                         end
                         F3M_DIV: begin
                             product = a_sig[31:0] / b_sig[31:0];
