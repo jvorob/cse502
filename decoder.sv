@@ -46,7 +46,8 @@ module Decoder
     
     // == Other codes
     output keep_pc_plus_immed, //(for AUIPC, we already have a separate PC+(...) adder, just shove that into exec result
-    output use_immed_alu // (ALU input B shoould b immed, not rs2)
+    output alu_use_immed, // (ALU input B shoould b immed, not rs2)
+    output alu_width_32  // Tell ALU it's a 32bit op (ADDW, MULW, etc)
 
 );
 
@@ -101,9 +102,9 @@ module Decoder
         
         //(for AUIPC, we already compute ALU_result+PC, mux that into exec-stage result)
         assign keep_pc_plus_immed = 0;
-
-        // ALU gets immed value instead of rs2 value
-        assign use_immed_alu = 0; //inst[6:0] inside{OP_OP_IMM, OP_IMM_32, OP_LOAD, OP_STORE, OP_JAL, OP_JALR};
+        
+        assign alu_use_immed = 0; //inst[6:0] inside{OP_OP_IMM, OP_IMM_32, OP_LOAD, OP_STORE, OP_JAL, OP_JALR};
+        assign alu_width_32 = 0;
 
 
         //TODO: special codes:
@@ -120,7 +121,7 @@ module Decoder
             // == Unusual immeds: U UJ S SB
             OP_LUI, OP_AUIPC: begin
                 imm = immed_U;
-                use_immed_alu = 1; 
+                alu_use_immed = 1; 
                 rs1 = 0; //don't add anything to immed
                 funct7 = 0;
                 funct3 = F3OP_ADD_SUB; //ALU does 0+immed
@@ -133,7 +134,7 @@ module Decoder
             // == JUMPS
             OP_JALR: begin
                 imm = immed_I;
-                use_immed_alu = 1; //rs1 + immed
+                alu_use_immed = 1; //rs1 + immed
                 funct7 = 0;
                 funct3 = F3OP_ADD_SUB; //ALU does 0+immed
 
@@ -143,7 +144,7 @@ module Decoder
             OP_JAL: begin
                 imm = immed_UJ;
                 rs1 = 0; 
-                use_immed_alu = 1;
+                alu_use_immed = 1;
                 funct7 = 0;
                 funct3 = F3OP_ADD_SUB; //ALU does 0+immed
 
@@ -155,16 +156,17 @@ module Decoder
             OP_BRANCH: begin
                 imm = immed_SB;
                 // ALU does rs1 comp rs2
+                funct7 = 0; //TODO: this will depend on stuff
                 {en_rs1, en_rs2, en_rd } = 3'b110; // test regs
                 //TODO: set alu codes
                 //TODO: set jump_if and jump_to
             end
 
             // === Load/Store
-            // (both of these also set use_immed_alu so ALU can calc address)
+            // (both of these also set alu_use_immed so ALU can calc address)
             OP_LOAD: begin
                 imm = immed_I;
-                use_immed_alu = 1;
+                alu_use_immed = 1;
                 funct7 = 0;
                 funct3 = F3OP_ADD_SUB; //ALU does rs1+immed (load-addr)
 
@@ -173,7 +175,7 @@ module Decoder
 
             OP_STORE: begin
                 imm = immed_S;
-                use_immed_alu = 1;
+                alu_use_immed = 1;
                 funct7 = 0;
                 funct3 = F3OP_ADD_SUB; //ALU does rs1+immed (store-addr)
 
@@ -186,7 +188,8 @@ module Decoder
             // == I-type
             OP_OP_IMM, OP_IMM_32: begin
                 imm = immed_I;
-                use_immed_alu = 1;
+                alu_use_immed = 1;
+                funct7 = 0;
                 {en_rs1, en_rs2, en_rd } = 3'b101; //no rs2
                 // ALU codes come from op
             end
@@ -195,6 +198,7 @@ module Decoder
                 imm = 0; //doesn't use it
                 {en_rs1, en_rs2, en_rd } = 3'b111; //uses all regs
                 // ALU codes come from op
+                alu_width_32 = 1;
             end
 
 
@@ -202,6 +206,7 @@ module Decoder
 
             OP_MISC_MEM, OP_SYSTEM: begin
                 imm = 0; // Might need to change this
+                funct7 = 0;
                 {en_rs1, en_rs2, en_rd } = 3'b000; // I think this is right?
             end
 

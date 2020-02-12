@@ -110,7 +110,8 @@ module top
     logic keep_pc_plus_immed; //(for AUIPC, we already have a separate PC+(...) adder
     // need to mux that into exec-stage output
 
-    logic use_immed_alu;// (ALU input B should be immed, not rs2)
+    logic alu_use_immed;// (ALU input B should be immed, not rs2)
+    logic alu_width_32; // (-W Op)
 
     Decoder d(
         .inst(cur_inst),
@@ -125,7 +126,7 @@ module top
         .funct7(funct7),
         .op(op),
 
-        .use_immed_alu,
+        .alu_use_immed,
         .keep_pc_plus_immed
     );
     
@@ -161,7 +162,7 @@ module top
     // == ALU signals
     logic [63:0] alu_out;
     logic [63:0] alu_b_input;
-    assign alu_b_input = use_immed_alu ? imm : out2;
+    assign alu_b_input = alu_use_immed ? imm : out2;
 
     Alu a(
         .a(out1),
@@ -169,6 +170,8 @@ module top
         .funct3(funct3),
         .funct7(funct7),
         .op(op),
+
+        .width_32(alu_width_32),
 
         .result(alu_out)
     );
