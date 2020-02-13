@@ -26,6 +26,9 @@ module id_ex_reg(
     input clk,
     input reset,
     input stall,
+    input [63:0] in_val_rs1,
+    input [63:0] in_val_rs2,
+    input [63:0] in_imm,
     output funct3
 );
     always_ff @(posedge clk) begin
@@ -46,6 +49,7 @@ module ex_mem_reg(
     input clk,
     input reset,
     input stall,
+    input [63:0] in_val_rs2,
     input [63:0] in_alu_result,
     output [63:0] out_alu_result
 );
@@ -68,6 +72,7 @@ module mem_wb_reg(
     input reset,
     input stall,
 
+    input [63:0] in_alu_result,
     input [63:0] in_mem_result,
     input [4:0] in_rd,
     input in_en_rd,
