@@ -97,52 +97,11 @@ module top
     // Components decoded from cur_inst, set by decoder
     decoded_inst_t deco; //short name because it'll be used everywhere
 
-    //logic [4:0] rs1;
-    //logic [4:0] rs2;
-    //logic [4:0] rd;
-    //logic en_rs1;
-    //logic en_rs2;
-    //logic en_rd;
-    //logic [63:0] imm;
-    //logic [2:0] funct3;
-    //logic [6:0] funct7;
-    //logic [6:0] op;
-
-    //// Special signals
-    //logic keep_pc_plus_immed; //(for AUIPC, we already have a separate PC+(...) adder
-    //// need to mux that into exec-stage output
-
-    //logic alu_use_immed;// (ALU input B should be immed, not rs2)
-    //logic alu_width_32; // (-W Op)
-
-    //Jump_Code jump_if;
-    //logic jump_absolute;
 
     Decoder d(
         .inst(cur_inst),
 
         .out(deco)
-
-        //.rs1(rs1),
-        //.rs2(rs2),
-        //.rd(rd),
-        //.en_rs1(en_rs1),
-        //.en_rs2(en_rs2),
-        //.en_rd(en_rd),
-        //.imm(imm),
-        //.funct3(funct3),
-        //.funct7(funct7),
-        //.op(op),
-
-        //.alu_use_immed,
-        //.alu_width_32,
-
-        //.jump_if,
-        //.jump_absolute,
-
-        //.keep_pc_plus_immed
-
-
     );
     
     // Register file
