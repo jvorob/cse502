@@ -95,47 +95,52 @@ module top
     // ------------------------BEGIN ID STAGE--------------------------
 
     // Components decoded from cur_inst, set by decoder
-    logic [4:0] rs1;
-    logic [4:0] rs2;
-    logic [4:0] rd;
-    logic en_rs1;
-    logic en_rs2;
-    logic en_rd;
-    logic [63:0] imm;
-    logic [2:0] funct3;
-    logic [6:0] funct7;
-    logic [6:0] op;
+    decoded_inst_t deco; //short name because it'll be used everywhere
 
-    // Special signals
-    logic keep_pc_plus_immed; //(for AUIPC, we already have a separate PC+(...) adder
-    // need to mux that into exec-stage output
+    //logic [4:0] rs1;
+    //logic [4:0] rs2;
+    //logic [4:0] rd;
+    //logic en_rs1;
+    //logic en_rs2;
+    //logic en_rd;
+    //logic [63:0] imm;
+    //logic [2:0] funct3;
+    //logic [6:0] funct7;
+    //logic [6:0] op;
 
-    logic alu_use_immed;// (ALU input B should be immed, not rs2)
-    logic alu_width_32; // (-W Op)
+    //// Special signals
+    //logic keep_pc_plus_immed; //(for AUIPC, we already have a separate PC+(...) adder
+    //// need to mux that into exec-stage output
 
-    Jump_Code jump_if;
-    logic jump_absolute;
+    //logic alu_use_immed;// (ALU input B should be immed, not rs2)
+    //logic alu_width_32; // (-W Op)
+
+    //Jump_Code jump_if;
+    //logic jump_absolute;
 
     Decoder d(
         .inst(cur_inst),
-        .rs1(rs1),
-        .rs2(rs2),
-        .rd(rd),
-        .en_rs1(en_rs1),
-        .en_rs2(en_rs2),
-        .en_rd(en_rd),
-        .imm(imm),
-        .funct3(funct3),
-        .funct7(funct7),
-        .op(op),
 
-        .alu_use_immed,
-        .alu_width_32,
+        .out(deco)
 
-        .jump_if,
-        .jump_absolute,
+        //.rs1(rs1),
+        //.rs2(rs2),
+        //.rd(rd),
+        //.en_rs1(en_rs1),
+        //.en_rs2(en_rs2),
+        //.en_rd(en_rd),
+        //.imm(imm),
+        //.funct3(funct3),
+        //.funct7(funct7),
+        //.op(op),
 
-        .keep_pc_plus_immed
+        //.alu_use_immed,
+        //.alu_width_32,
+
+        //.jump_if,
+        //.jump_absolute,
+
+        //.keep_pc_plus_immed
 
 
     );
@@ -144,16 +149,18 @@ module top
     logic [63:0] out1;
     logic [63:0] out2;
     logic writeback_en; // enables writeback to regfile
-    assign writeback_en = en_rd && enable_execute; // if curr op had a dest reg
+    assign writeback_en = deco.en_rd && enable_execute; // if curr op had a dest reg
 
     RegFile rf(
         .clk(clk),
         .reset(reset),
-        .read_addr1(rs1),
-        .read_addr2(rs2),
-        .wb_addr(rd),
+
+        .read_addr1(deco.rs1),
+        .read_addr2(deco.rs2),
+        .wb_addr(deco.rd),
         .wb_data(exec_result),
         .wb_en(writeback_en),
+
         .out1(out1),
         .out2(out2)
     );
@@ -172,16 +179,16 @@ module top
     // == ALU signals
     logic [63:0] alu_out;
     logic [63:0] alu_b_input;
-    assign alu_b_input = alu_use_immed ? imm : out2;
+    assign alu_b_input = deco.alu_use_immed ? deco.immed : out2;
 
     Alu a(
         .a(out1),
         .b(alu_b_input),
-        .funct3(funct3),
-        .funct7(funct7),
-        .op(op),
+        .funct3(deco.funct3),
+        .funct7(deco.funct7),
+        .width_32(deco.alu_width_32),
+        .op(0), // This is unused I think?
 
-        .width_32(alu_width_32),
 
         .result(alu_out)
     );
@@ -202,10 +209,10 @@ module top
     logic do_jump;
 
     // mask off bottommost bit of jump target: (according to RISCV spec)
-    assign jump_target_address = (jump_absolute ? alu_out : pc + imm) & ~64'b1;
+    assign jump_target_address = (deco.jump_absolute ? alu_out : (pc + deco.immed)) & ~64'b1;
 
     always_comb begin
-        case (jump_if) inside
+        case (deco.jump_if) inside
             JUMP_NO:      do_jump = 0;
             JUMP_YES:     do_jump = 1;
             JUMP_ALU_EQZ: do_jump = (alu_out == 0);
@@ -231,10 +238,9 @@ module top
     );
 
     // ------------------------BEGIN WB STAGE---------------------------
+    
     logic [63:0] exec_result;
-
-    //TODO: this won't be correct because this isn't the instruction's PC, it's the state machine's
-    assign exec_result = keep_pc_plus_immed ? pc + imm : alu_out;
+    assign exec_result = deco.keep_pc_plus_immed ? pc + deco.immed : alu_out;
 
     // ------------------------END WB STAGE-----------------------------
     
