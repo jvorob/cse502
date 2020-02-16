@@ -77,11 +77,13 @@ module Icache
                     state <= 3'h2;
             end
             3'h2: begin // data channel
-                if(m_axi_rvalid)
+                if(m_axi_rvalid) begin
+                    mem[offset] <= m_axi_rdata;
                     offset <= offset + 1;
-                if(m_axi_rlast) begin
-                    line_valid <= 1'b1;
-                    state <= 3'h0;
+                    if(m_axi_rlast) begin
+                        line_valid <= 1'b1;
+                        state <= 3'h0;
+                    end
                 end
             end
             default: state <= 3'h0;
