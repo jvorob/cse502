@@ -78,17 +78,23 @@ module top
     // need to disable continuously execute current instr while waiting 
     
 
-    // Stall input signals: 
-    // will be set by various modules when hazards are detected
+    // == Stall input signals: 
+    // will be set by hazard detection modules
     logic IF_stall;
     logic ID_stall;
     logic EX_stall;
     logic MEM_stall;
     logic WB_stall; //this one shouldn't stall ever but W/E
 
-    // Traffic controller should translate stall signals into actual
-    // controls for the interstage registers (e.g.: write_en, clear, etc)
-    // TODO
+    // == Traffic controller:
+    // should translate stall signals into actual
+    // controls for the interstage registers (e.g.: input_en, do_bubble)
+    
+    // TODO TEMP: for now lets just do the trivial traffic controller
+    // Nothing stalls: and we insert bubbles at ID if I-Cache isn't ready
+    //
+    logic temp_global_input_en = 1; 
+    // TODO: replace with individual connections to traffic controller
 
 
     // ------------------------BEGIN IF STAGE--------------------------
@@ -100,7 +106,11 @@ module top
     ID_reg ID_reg(
         .clk,
         .reset,
-        //.stall(), TODO: traffic control
+
+        //traffic signals
+        .input_en(temp_global_input_en),
+        .do_bubble(!icache_valid), // if no instruction, pipeline gets bubble (TODO TEMP)
+        .data_valid(),
 
         // incoming signals for next step's ID
         .next_pc(pc),
@@ -114,11 +124,11 @@ module top
     // ------------------------BEGIN ID STAGE--------------------------
 
     // Components decoded from cur_inst, set by decoder
-    decoded_inst_t ID_deco; //short name because it'll be used everywhere
+    decoded_inst_t ID_deco; 
 
 
     Decoder d(
-        .inst(cur_inst),
+        .inst(ID_reg.curr_inst),
 
         .out(ID_deco)
     );
@@ -129,7 +139,7 @@ module top
 
     // === Enable RegFile writeback USING SIGNALS FROM WB STAGE
     logic writeback_en; // enables writeback to regfile
-    assign writeback_en = WB_reg.curr_deco.en_rd && enable_execute; // if curr op had a dest reg
+    assign writeback_en = WB_reg.curr_deco.en_rd && WB_reg.data_valid;  // dont write bubbles
 
     RegFile rf(
         .clk(clk),
@@ -137,20 +147,29 @@ module top
 
         .read_addr1(ID_deco.rs1),
         .read_addr2(ID_deco.rs2),
-        .wb_addr(ID_deco.rd),
-        .wb_data(WB_result), //TODO: make this correct
+
+        .wb_addr(WB_reg.curr_deco.rd),
+        .wb_data(WB_result),
         .wb_en(writeback_en),
 
         .out1(ID_out1),
         .out2(ID_out2)
     );
+
+    //== Some dummy signals for debugging (since gtkwave can't show packed structs
+    logic [63:0] ID_immed = ID_deco.immed;
+    logic [4:0] ID_rd = ID_deco.rd;
     
     // -----------------------END ID STAGE------------------------------
 
     EX_reg EX_reg(
         .clk,
         .reset,
-        //.stall(), //TODO
+
+        //traffic signals
+        .input_en(temp_global_input_en),
+        .do_bubble(!ID_reg.data_valid), // propagate bubbles (TODO TEMP)
+        .data_valid(),
 
         // Data coming in from ID + RF stage
         .next_pc(ID_reg.curr_pc),
@@ -217,7 +236,11 @@ module top
     MEM_reg MEM_reg(
         .clk(clk),
         .reset(reset),
-        //.stall(), //TODO
+        
+        //traffic signals
+        .input_en(temp_global_input_en),
+        .do_bubble(!EX_reg.data_valid), // propagate bubbles (TODO, TEMP)
+        .data_valid(),
 
         // Data coming in from EX
         .next_pc(EX_reg.curr_pc),
@@ -244,7 +267,11 @@ module top
     WB_reg WB_reg(
         .clk(clk),
         .reset(reset),
-        //.stall(),
+
+        //traffic signals
+        .input_en(temp_global_input_en),
+        .do_bubble(!MEM_reg.data_valid), // propagate bubbles (TODO, TEMP)
+        .data_valid(),
 
         // Data signals coming in from MEM
         .next_pc(MEM_reg.curr_pc),
@@ -255,7 +282,7 @@ module top
 
         // Data signals for current WB step
         .curr_pc(),
-        .curr_deco(), // includes pc & immed
+        .curr_deco(),
         .curr_alu_result(),
         .curr_mem_result()
 
@@ -265,6 +292,9 @@ module top
     
     logic [63:0] WB_result;
     assign WB_result = WB_reg.curr_alu_result;
+
+    logic [4:0] WB_rd = WB_reg.curr_deco.rd;
+    logic WB_en_rd = WB_reg.curr_deco.en_rd;
     //TODO: set proper regfile writeback: switch btwn ALU and mem
 
     // ------------------------END WB STAGE-----------------------------
