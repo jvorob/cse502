@@ -84,23 +84,23 @@ module Decoder
 
         // === SET DEFAULT VALUES FOR THESE:
         // will be overriden for specific instructions that need them
-        assign out.rs1    = inst[19:15];
-        assign out.rs2    = inst[24:20];
-        assign out.rd     = inst[11: 7];
+        out.rs1    = inst[19:15];
+        out.rs2    = inst[24:20];
+        out.rd     = inst[11: 7];
 
-        assign out.funct3 = inst[14:12]; //TODO: override these for certain instructions
-        assign out.funct7 = inst[31:25]; // branches, adds, etc
+        out.funct3 = inst[14:12]; //TODO: override these for certain instructions
+        out.funct7 = inst[31:25]; // branches, adds, etc
 
         // ====== SPECIAL SIGNALS
         
         //(for AUIPC, we already compute ALU_result+PC, mux that into exec-stage result)
-        assign out.keep_pc_plus_immed = 0;
+        out.keep_pc_plus_immed = 0;
         
-        assign out.alu_use_immed = 0; //inst[6:0] inside{OP_OP_IMM, OP_IMM_32, OP_LOAD, OP_STORE, OP_JAL, OP_JALR};
-        assign out.alu_width_32 = 0;
+        out.alu_use_immed = 0; //inst[6:0] inside{OP_OP_IMM, OP_IMM_32, OP_LOAD, OP_STORE, OP_JAL, OP_JALR};
+        out.alu_width_32 = 0;
 
-        assign out.jump_if = JUMP_NO;
-        assign out.jump_absolute = 0; // JAL and Branches are PC-relative, JALR is absolute
+        out.jump_if = JUMP_NO;
+        out.jump_absolute = 0; // JAL and Branches are PC-relative, JALR is absolute
 
 
         // === MAIN DECODER:
