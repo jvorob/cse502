@@ -231,6 +231,12 @@ module top
     logic [63:0] exec_result;
     assign exec_result = EX_deco.keep_pc_plus_immed ? EX_reg.curr_pc + EX_deco.immed : alu_out;
 
+
+    //== Some dummy signals for debugging (since gtkwave can't show packed structs
+    logic [63:0] EX_immed = EX_deco.immed;
+    logic [4:0] EX_rs1 = EX_deco.rs1;
+    logic [4:0] EX_rs2 = EX_deco.rs2;
+
     // ------------------------END EX STAGE-----------------------------
 
     MEM_reg MEM_reg(
