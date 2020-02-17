@@ -75,7 +75,20 @@ module top
 
     logic enable_execute; //set by state machine, is high for one clock for each instr
     // until we have instruction cache, many clock cycles spent on AXI-fetch
-    // need to disa continuously execute current instr while waiting 
+    // need to disable continuously execute current instr while waiting 
+    
+
+    // Stall input signals: 
+    // will be set by various modules when hazards are detected
+    logic IF_stall;
+    logic ID_stall;
+    logic EX_stall;
+    logic MEM_stall;
+    logic WB_stall; //this one shouldn't stall ever but W/E
+
+    // Traffic controller should translate stall signals into actual
+    // controls for the interstage registers (e.g.: write_en, clear, etc)
+    // TODO
 
 
     // ------------------------BEGIN IF STAGE--------------------------
@@ -84,94 +97,110 @@ module top
 
     // ------------------------END IF STAGE----------------------------
 
-    if_id_reg if_id(
-        .clk(clk),
-        .reset(reset),
-        .stall(),
-        .in_inst(),
-        .out_inst()
+    ID_reg ID_reg(
+        .clk,
+        .reset,
+        //.stall(), TODO: traffic control
+
+        // incoming signals for next step's ID
+        .next_pc(pc),
+        .next_inst(cur_inst),
+
+        // outgoing signals for current ID stage
+        .curr_pc(),
+        .curr_inst()
     );
 
     // ------------------------BEGIN ID STAGE--------------------------
 
     // Components decoded from cur_inst, set by decoder
-    decoded_inst_t deco; //short name because it'll be used everywhere
+    decoded_inst_t ID_deco; //short name because it'll be used everywhere
 
 
     Decoder d(
         .inst(cur_inst),
 
-        .out(deco)
+        .out(ID_deco)
     );
     
     // Register file
-    logic [63:0] out1;
-    logic [63:0] out2;
+    logic [63:0] ID_out1;
+    logic [63:0] ID_out2;
+
+    // === Enable RegFile writeback USING SIGNALS FROM WB STAGE
     logic writeback_en; // enables writeback to regfile
-    assign writeback_en = deco.en_rd && enable_execute; // if curr op had a dest reg
+    assign writeback_en = WB_reg.curr_deco.en_rd && enable_execute; // if curr op had a dest reg
 
     RegFile rf(
         .clk(clk),
         .reset(reset),
 
-        .read_addr1(deco.rs1),
-        .read_addr2(deco.rs2),
-        .wb_addr(deco.rd),
-        .wb_data(exec_result),
+        .read_addr1(ID_deco.rs1),
+        .read_addr2(ID_deco.rs2),
+        .wb_addr(ID_deco.rd),
+        .wb_data(WB_result), //TODO: make this correct
         .wb_en(writeback_en),
 
-        .out1(out1),
-        .out2(out2)
+        .out1(ID_out1),
+        .out2(ID_out2)
     );
     
     // -----------------------END ID STAGE------------------------------
 
-    id_ex_reg id_ex(
-        .clk(clk),
-        .reset(reset),
-        .stall(),
-        .funct3()
+    EX_reg EX_reg(
+        .clk,
+        .reset,
+        //.stall(), //TODO
+
+        // Data coming in from ID + RF stage
+        .next_pc(ID_reg.curr_pc),
+        .next_deco(ID_deco), // includes pc & immed
+        .next_val_rs1(ID_out1),
+        .next_val_rs2(ID_out2),
+
+
+        // Data signals for current EX step
+        .curr_pc(),
+        .curr_deco(),
+        .curr_val_rs1(),
+        .curr_val_rs2()
     );
 
     // -----------------------BEGIN EX STAGE----------------------------
 
+    decoded_inst_t EX_deco;
+    assign EX_deco = EX_reg.curr_deco;
+
     // == ALU signals
     logic [63:0] alu_out;
     logic [63:0] alu_b_input;
-    assign alu_b_input = deco.alu_use_immed ? deco.immed : out2;
+
+    // ALU either gets value of immed or value of rs2
+    assign alu_b_input = (EX_deco.alu_use_immed ? 
+            EX_deco.immed : 
+            EX_reg.curr_val_rs2);
 
     Alu a(
-        .a(out1),
+        .a(EX_reg.curr_val_rs1),
         .b(alu_b_input),
-        .funct3(deco.funct3),
-        .funct7(deco.funct7),
-        .width_32(deco.alu_width_32),
+        .funct3  (EX_deco.funct3),
+        .funct7  (EX_deco.funct7),
+        .width_32(EX_deco.alu_width_32),
         .op(0), // This is unused I think?
 
 
         .result(alu_out)
     );
 
-    // ------------------------END EX STAGE-----------------------------
-
-    ex_mem_reg ex_mem(
-        .clk(clk),
-        .reset(reset),
-        .stall(),
-        .in_alu_result(),
-        .out_alu_result()
-    );
-
-
     // Jump logic
     logic [63:0] jump_target_address;
     logic do_jump;
 
     // mask off bottommost bit of jump target: (according to RISCV spec)
-    assign jump_target_address = (deco.jump_absolute ? alu_out : (pc + deco.immed)) & ~64'b1;
+    assign jump_target_address = (EX_deco.jump_absolute ? alu_out : (EX_reg.curr_pc + EX_deco.immed)) & ~64'b1;
 
     always_comb begin
-        case (deco.jump_if) inside
+        case (EX_deco.jump_if) inside
             JUMP_NO:      do_jump = 0;
             JUMP_YES:     do_jump = 1;
             JUMP_ALU_EQZ: do_jump = (alu_out == 0);
@@ -180,26 +209,63 @@ module top
     end
 
 
+    logic [63:0] exec_result;
+    assign exec_result = EX_deco.keep_pc_plus_immed ? EX_reg.curr_pc + EX_deco.immed : alu_out;
+
+    // ------------------------END EX STAGE-----------------------------
+
+    MEM_reg MEM_reg(
+        .clk(clk),
+        .reset(reset),
+        //.stall(), //TODO
+
+        // Data coming in from EX
+        .next_pc(EX_reg.curr_pc),
+        .next_deco(EX_deco), // includes pc & immed
+        .next_data(exec_result),  // result from ALU or other primary value
+        .next_data2(0 /*TODO*/), // extra value if needed (e.g. for stores, etc)
+
+
+        // Data signals for current MEM step
+        .curr_pc(),
+        .curr_deco(),
+        .curr_data(),
+        .curr_data2()
+        
+    );
+
+
     // ------------------------BEGIN MEM STAGE--------------------------
+
+    //TODO: noop for now, otherwise compute some result for mem stuff
 
     // ------------------------END MEM STAGE----------------------------
 
-    mem_wb_reg mem_wb(
+    WB_reg WB_reg(
         .clk(clk),
         .reset(reset),
-        .stall(),
-        .in_mem_result(),
-        .in_rd(),
-        .in_en_rd(),
-        .out_mem_result(),
-        .out_rd(),
-        .out_en_rd()
+        //.stall(),
+
+        // Data signals coming in from MEM
+        .next_pc(MEM_reg.curr_pc),
+        .next_deco(MEM_reg.curr_deco),
+        .next_alu_result(MEM_reg.curr_data),
+        .next_mem_result(0 /*TODO*/),
+
+
+        // Data signals for current WB step
+        .curr_pc(),
+        .curr_deco(), // includes pc & immed
+        .curr_alu_result(),
+        .curr_mem_result()
+
     );
 
     // ------------------------BEGIN WB STAGE---------------------------
     
-    logic [63:0] exec_result;
-    assign exec_result = deco.keep_pc_plus_immed ? pc + deco.immed : alu_out;
+    logic [63:0] WB_result;
+    assign WB_result = WB_reg.curr_alu_result;
+    //TODO: set proper regfile writeback: switch btwn ALU and mem
 
     // ------------------------END WB STAGE-----------------------------
     

@@ -50,7 +50,6 @@ module Decoder
     output decoded_inst_t out
 );
 
-    assign op = inst[6:0];
 
     // Immediate versions (will be muxed depending on opcode)
     logic [63:0]  immed_I ; //12 bits in opcode (then sign-extend the rest)
