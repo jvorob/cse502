@@ -77,19 +77,18 @@ module top
     // until we have instruction cache, many clock cycles spent on AXI-fetch
     // need to disable continuously execute current instr while waiting 
     
+    // Traffic controller signals:
+    // gen_bubble
+    logic gen_id_bubble;
+    logic gen_ex_bubble;
+    logic gen_mem_bubble;
+    logic gen_wb_bubble;
 
-    // Stall input signals: 
-    // will be set by various modules when hazards are detected
-    logic IF_stall;
-    logic ID_stall;
-    logic EX_stall;
-    logic MEM_stall;
-    logic WB_stall; //this one shouldn't stall ever but W/E
-
-    // Traffic controller should translate stall signals into actual
-    // controls for the interstage registers (e.g.: write_en, clear, etc)
-    // TODO
-
+    // wr_en
+    logic id_wr_en;
+    logic ex_wr_en;
+    logic mem_wr_en;
+    logic wb_wr_en;
 
     // ------------------------BEGIN IF STAGE--------------------------
 
@@ -100,7 +99,11 @@ module top
     ID_reg ID_reg(
         .clk,
         .reset,
-        //.stall(), TODO: traffic control
+
+        //traffic signals
+        .wr_en(id_wr_en),
+        .gen_bubble(!icache_valid), // if no instruction, pipeline gets bubble (TODO TEMP)
+        .bubble(),
 
         // incoming signals for next step's ID
         .next_pc(pc),
@@ -114,11 +117,11 @@ module top
     // ------------------------BEGIN ID STAGE--------------------------
 
     // Components decoded from cur_inst, set by decoder
-    decoded_inst_t ID_deco; //short name because it'll be used everywhere
+    decoded_inst_t ID_deco; 
 
 
     Decoder d(
-        .inst(cur_inst),
+        .inst(ID_reg.curr_inst),
 
         .out(ID_deco)
     );
@@ -129,7 +132,7 @@ module top
 
     // === Enable RegFile writeback USING SIGNALS FROM WB STAGE
     logic writeback_en; // enables writeback to regfile
-    assign writeback_en = WB_reg.curr_deco.en_rd && enable_execute; // if curr op had a dest reg
+    assign writeback_en = WB_reg.curr_deco.en_rd && !WB_reg.bubble;  // dont write bubbles
 
     RegFile rf(
         .clk(clk),
@@ -137,20 +140,29 @@ module top
 
         .read_addr1(ID_deco.rs1),
         .read_addr2(ID_deco.rs2),
-        .wb_addr(ID_deco.rd),
-        .wb_data(WB_result), //TODO: make this correct
+
+        .wb_addr(WB_reg.curr_deco.rd),
+        .wb_data(WB_result),
         .wb_en(writeback_en),
 
         .out1(ID_out1),
         .out2(ID_out2)
     );
+
+    //== Some dummy signals for debugging (since gtkwave can't show packed structs
+    logic [63:0] ID_immed = ID_deco.immed;
+    logic [4:0] ID_rd = ID_deco.rd;
     
     // -----------------------END ID STAGE------------------------------
 
     EX_reg EX_reg(
         .clk,
         .reset,
-        //.stall(), //TODO
+
+        //traffic signals
+        .wr_en(ex_wr_en),
+        .gen_bubble(ID_reg.bubble || gen_id_bubble),
+        .bubble(),
 
         // Data coming in from ID + RF stage
         .next_pc(ID_reg.curr_pc),
@@ -188,7 +200,6 @@ module top
         .width_32(EX_deco.alu_width_32),
         .op(0), // This is unused I think?
 
-
         .result(alu_out)
     );
 
@@ -212,12 +223,22 @@ module top
     logic [63:0] exec_result;
     assign exec_result = EX_deco.keep_pc_plus_immed ? EX_reg.curr_pc + EX_deco.immed : alu_out;
 
+
+    //== Some dummy signals for debugging (since gtkwave can't show packed structs
+    logic [63:0] EX_immed = EX_deco.immed;
+    logic [4:0] EX_rs1 = EX_deco.rs1;
+    logic [4:0] EX_rs2 = EX_deco.rs2;
+
     // ------------------------END EX STAGE-----------------------------
 
     MEM_reg MEM_reg(
         .clk(clk),
         .reset(reset),
-        //.stall(), //TODO
+        
+        //traffic signals
+        .wr_en(mem_wr_en),
+        .gen_bubble(EX_reg.bubble || gen_ex_bubble),
+        .bubble(),
 
         // Data coming in from EX
         .next_pc(EX_reg.curr_pc),
@@ -225,13 +246,11 @@ module top
         .next_data(exec_result),  // result from ALU or other primary value
         .next_data2(0 /*TODO*/), // extra value if needed (e.g. for stores, etc)
 
-
         // Data signals for current MEM step
         .curr_pc(),
         .curr_deco(),
         .curr_data(),
-        .curr_data2()
-        
+        .curr_data2()        
     );
 
 
@@ -244,7 +263,11 @@ module top
     WB_reg WB_reg(
         .clk(clk),
         .reset(reset),
-        //.stall(),
+
+        //traffic signals
+        .wr_en(wb_wr_en),
+        .gen_bubble(MEM_reg.bubble || gen_mem_bubble),
+        .bubble(),
 
         // Data signals coming in from MEM
         .next_pc(MEM_reg.curr_pc),
@@ -252,28 +275,69 @@ module top
         .next_alu_result(MEM_reg.curr_data),
         .next_mem_result(0 /*TODO*/),
 
-
         // Data signals for current WB step
         .curr_pc(),
-        .curr_deco(), // includes pc & immed
+        .curr_deco(),
         .curr_alu_result(),
         .curr_mem_result()
-
     );
 
     // ------------------------BEGIN WB STAGE---------------------------
     
     logic [63:0] WB_result;
     assign WB_result = WB_reg.curr_alu_result;
+
+    logic [4:0] WB_rd = WB_reg.curr_deco.rd;
+    logic WB_en_rd = WB_reg.curr_deco.en_rd;
     //TODO: set proper regfile writeback: switch btwn ALU and mem
 
     // ------------------------END WB STAGE-----------------------------
     
-
     // -------Modules outside of pipeline (e.g. hazard detection)-------
+    
+    logic haz_id_stall;
+    logic haz_ex_stall;
+    logic haz_mem_stall;
+    logic haz_wb_stall;
+    
     hazard_unit haz(
-        .clk(clk),
-        .hazard()
+        .ID_deco(ID_deco),
+        .id_bubble(ID_reg.bubble),
+
+        .EX_deco(EX_deco),
+        .ex_bubble(EX_reg.bubble),
+
+        .MEM_deco(MEM_reg.curr_deco),
+        .mem_bubble(MEM_reg.bubble),
+
+        .WB_deco(WB_reg.curr_deco),
+        .wb_bubble(WB_reg.bubble),
+
+        // Outputs stalls at corresponding locations
+        .id_stall(haz_id_stall),
+        .ex_stall(haz_ex_stall),
+        .mem_stall(haz_mem_stall),
+        .wb_stall(haz_wb_stall)
+    );
+
+    traffic_control traffic(
+        // Inputs (stalls from hazard unit)
+        .id_stall(haz_id_stall),
+        .ex_stall(haz_ex_stall),
+        .mem_stall(haz_mem_stall),
+        .wb_stall(haz_wb_stall),
+
+        // Output gen bubbles
+        .id_bubble(gen_id_bubble),
+        .ex_bubble(gen_ex_bubble),
+        .mem_bubble(gen_mem_bubble),
+        .wb_bubble(gen_wb_bubble),
+
+        // Output wr_en
+        .id_wr_en(id_wr_en),
+        .ex_wr_en(ex_wr_en),
+        .mem_wr_en(mem_wr_en),
+        .wb_wr_en(wb_wr_en)
     );
 
 
@@ -300,7 +364,11 @@ module top
             else begin
                 if (do_jump) begin
                     sm_pc <= jump_target_address;
-                end else begin
+                end 
+                else if (!id_wr_en) begin
+                    sm_pc <= sm_pc;
+                end
+                else begin
                     sm_pc <= sm_pc + 64'h4;
                 end
             end

@@ -1,14 +1,36 @@
 // This holds the pipeline registers
 
+/* 
+ * RULES FOR REGISTERS:
+ *
+ * Each interstage is named after the stage it goes into
+ * i.e. ID_reg is the IF/ID interstage
+ *
+ *
+ * Each interstage either holds a valid instruction (bubble==0)
+ * Or it holds a bubble (bubble==1, all regs cleared)
+ *
+ * If it holds a valid op which must stay put, then the reg should have
+ *    (!wr_en, !gen_bubble)
+ *
+ * If its command is a bubble, or an op which can advance, then it needs to
+ * take in the value from the preceding stage
+ *
+ * The op it takes in can be a valid op, in which our reg gets (wr_en,  !gen_bubble)
+ * Or the op it takes in can be a bubble, and we get           (<dontcare>, gen_bubble)
+ *
+ */
+
 // Instruction Fetch / Instruction Decode (+ Register fetch) register
 module ID_reg(
-    // Reg signals
+    // Control signals
     input clk,
     input reset,
     
-    input wr_en,
-    input gen_bubble,
-    output bubble
+    // Traffic Signals
+    input wr_en,    // allows reg to clock-in results from prev stage
+    input gen_bubble,   // clears reg, priority over input_en
+    output bubble, // is 0 for normal ops, 1 for bubbles
 
     // Data signals coming in from IF
     input [63:0] next_pc,
@@ -20,11 +42,21 @@ module ID_reg(
 );
     always_ff @(posedge clk) begin
         if (reset == 1) begin
-            //out_inst <= 0;
+            bubble <= 1;
+            curr_pc    <= 0;
+            curr_inst  <= 0;
         end
         else if (wr_en == 1) begin
-            curr_pc <= next_pc;
-            bubble <= gen_bubble;
+            if (gen_bubble) begin
+                bubble <= 1;
+                curr_pc <= 0;
+                curr_inst <= 0;
+            end
+            else begin
+                bubble <= 0;
+                curr_pc <= next_pc;
+                curr_inst <= next_inst;
+            end
         end
     end
 endmodule
@@ -35,10 +67,11 @@ module EX_reg(
     // Reg Signals
     input clk,
     input reset,
-    input wr_en,
-    input gen_bubble,
     
-    output bubble
+    // Traffic Signals
+    input wr_en,    // allows reg to clock-in results from prev stage
+    input gen_bubble,   // clears reg, priority over input_en
+    output bubble, // is 0 for normal ops, 1 for bubbles
     
     // Data signals coming in from ID (decode/regfile)
     input [63:0] next_pc,
@@ -48,19 +81,33 @@ module EX_reg(
 
 
     // Data signals for current EX step
-    output [63:0] curr_pc,
+    output [63:0]         curr_pc,
     output decoded_inst_t curr_deco,
     output [63:0]         curr_val_rs1,
     output [63:0]         curr_val_rs2
 );
     always_ff @(posedge clk) begin
         if (reset == 1) begin
-            
+            bubble       <= 1;
+            curr_pc      <= 0;
+            curr_deco    <= 0;
+            curr_val_rs1 <= 0;
+            curr_val_rs2 <= 0;
         end
-        else begin
-            if (wr_en == 1) begin
-                curr_pc <= next_pc;
-                bubble <= gen_bubble; 
+        else if (wr_en == 1) begin
+            if (gen_bubble) begin
+                bubble <= 1;
+                curr_pc <= 0;
+                curr_deco <= 0;
+                curr_val_rs1 <= 0;
+                curr_val_rs2 <= 0;
+            end
+            else begin
+                bubble <= 0;
+                curr_pc      <= next_pc;
+                curr_deco    <= next_deco;
+                curr_val_rs1 <= next_val_rs1;
+                curr_val_rs2 <= next_val_rs2;
             end
         end
     end
@@ -72,11 +119,12 @@ module MEM_reg(
     // Reg Signals
     input clk,
     input reset,
-    input wr_en,
-    input gen_bubble,
-     
-    output bubble
     
+    // Traffic Signals
+    input wr_en,    // allows reg to clock-in results from prev stage
+    input gen_bubble,   // clears reg, priority over input_en
+    output bubble, // is 0 for normal ops, 1 for bubbles
+
     // Data signals coming in from EX
     input [63:0] next_pc,
     input decoded_inst_t next_deco, // includes pc & immed
@@ -91,12 +139,26 @@ module MEM_reg(
 );
     always_ff @(posedge clk) begin
         if (reset == 1) begin
-            //out_alu_result <= 0;
+            bubble       <= 1;
+            curr_pc      <= 0;
+            curr_deco    <= 0;
+            curr_data    <= 0;
+            curr_data2   <= 0;
         end
-        else begin
-            if (wr_en == 1) begin
-                curr_pc <= next_pc;
-                bubble <= gen_bubble;
+        else if (wr_en == 1) begin
+            if (gen_bubble) begin
+                bubble <= 1;
+                curr_pc <= 0;
+                curr_deco <= 0;
+                curr_data <= 0;
+                curr_data2 <= 0;
+            end
+            else begin
+                bubble <= 0;
+                curr_pc      <= next_pc;
+                curr_deco    <= next_deco;
+                curr_data    <= next_data;
+                curr_data2   <= next_data2;
             end
         end
     end
@@ -108,8 +170,11 @@ module WB_reg(
     // Reg Signals
     input clk,
     input reset,
-    input wr_en,
-    input gen_bubble,
+
+    // Traffic Signals
+    input wr_en,    // allows reg to clock-in results from prev stage
+    input gen_bubble,   // clears reg, priority over input_en
+    output bubble, // is 0 for normal ops, 1 for bubbles
 
     // Data signals coming in from MEM
     input [63:0] next_pc,
@@ -117,34 +182,34 @@ module WB_reg(
     input [63:0]         next_alu_result,
     input [63:0]         next_mem_result,
 
-
     // Data signals for current WB step
     output [63:0] curr_pc,
     output decoded_inst_t curr_deco, // includes pc & immed
     output [63:0]         curr_alu_result,
     output [63:0]         curr_mem_result
-
-    output bubble
 );
     always_ff @(posedge clk) begin
         if (reset == 1) begin
-            //out_mem_result <= 0;
-            //out_rd <= 0;
-            //out_en_rd <= 0;
+            bubble          <= 1;
+            curr_pc         <= 0;
+            curr_deco       <= 0;
+            curr_alu_result <= 0;
+            curr_mem_result <= 0;
         end
-        else begin
-            if (wr_en == 1) begin
-                curr_pc <= next_pc;
-                out_mem_result <= in_mem_result;
-                out_rd <= in_rd;
-                out_en_rd <= in_en_rd;
-                bubble <= gen_bubble;
+        else if (wr_en == 1) begin
+            if (gen_bubble) begin
+                bubble <= 1;
+                curr_pc <= 0;
+                curr_deco <= 0;
+                curr_alu_result <= 0;
+                curr_mem_result <= 0;
             end
             else begin
-                // Not sure if this is necessary.
-                // Even if en_rd=1, it would just keep writing to the same register with
-                // the same value over and over even with stalls.
-                //out_en_rd <= 0; 
+                bubble          <= 0;
+                curr_pc         <= next_pc;
+                curr_deco       <= next_deco;
+                curr_alu_result <= next_alu_result;
+                curr_mem_result <= next_mem_result;
             end
         end
     end
