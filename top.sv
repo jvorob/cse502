@@ -348,11 +348,18 @@ module top
             $error("ERROR: executing unaligned instruction at PC=%x", sm_pc);
     end
 
+    logic [2:0] counter;
+
     always_ff @ (posedge clk) begin
-        if (reset)
+        if (reset) begin
             sm_pc <= entry;
+            counter <= 0;
+        end
         else if (icache_valid) begin
-            if (ir == 0) begin // === Run until we hit a 0x0000_0000 instruction
+            if (ir == 0 && counter < 5) begin // === Run until we hit a 0x0000_0000 instruction (wait a few more cycles for pipeline to finish)
+                counter <= counter + 1;
+            end
+            else if (counter == 5) begin
                 $display("===== Program terminated =====");
                 $display("    PC = 0x%0x", pc);
                     for(int i = 0; i < 32; i++)
