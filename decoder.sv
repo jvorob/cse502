@@ -213,13 +213,18 @@ module Decoder
                 out.funct7 = 0;
                 {out.en_rs1, out.en_rs2, out.en_rd } = 3'b101; //no rs2
                 // ALU codes come from op
+                if (op_code == OP_IMM_32) begin
+                    out.alu_width_32 = 1;
+                end
             end
 
             OP_OP, OP_OP_32: begin
                 out.immed = 0; //doesn't use it
                 {out.en_rs1, out.en_rs2, out.en_rd } = 3'b111; //uses all regs
                 // ALU codes come from op
-                out.alu_width_32 = 1;
+                if (op_code == OP_OP_32) begin
+                    out.alu_width_32 = 1;
+                end
             end
 
 
