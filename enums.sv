@@ -21,6 +21,96 @@ typedef enum bit[1:0] {
 } Jump_Code;
 
 
+// Register name mappings
+typedef enum bit[4:0] {
+    ZERO = 5'd0,
+    RA   = 5'd1,
+    SP   = 5'd2,
+    GP   = 5'd3,
+    TP   = 5'd4,
+    
+    T0   = 5'd5,
+    T1   = 5'd6,
+    T2   = 5'd7,
+
+    S0   = 5'd8,
+    S1   = 5'd9,
+    
+    A0   = 5'd10,
+    A1   = 5'd11,
+
+    A2   = 5'd12,
+    A3   = 5'd13,
+    A4   = 5'd14,
+    A5   = 5'd15,
+    A6   = 5'd16,
+    A7   = 5'd17,
+
+    S2   = 5'd18,
+    S3   = 5'd19,
+    S4   = 5'd20,
+    S5   = 5'd21,
+    S6   = 5'd22,
+    S7   = 5'd23,
+    S8   = 5'd24,
+    S9   = 5'd25,
+    S10  = 5'd26,
+    S11  = 5'd27,
+
+    T3   = 5'd28,
+    T4   = 5'd29,
+    T5   = 5'd30,
+    T6   = 5'd31
+} registers;
+
+// s0/fp are the same register
+typedef enum bit[4:0] {
+    FP   = 5'd8
+} registers_alt_names;
+
+// Floating-Point registers
+typedef enum bit[4:0] {
+    F_T0    = 5'd0,
+    F_T1    = 5'd1,
+    F_T2    = 5'd2,
+    F_T3    = 5'd3,
+    F_T4    = 5'd4,
+    F_T5    = 5'd5,
+    F_T6    = 5'd6,
+    F_T7    = 5'd7,
+
+    F_S0    = 5'd8,
+    F_S1    = 5'd9,
+
+    F_A0    = 5'd10,
+    F_A1    = 5'd11,
+
+    F_A2    = 5'd12,
+    F_A3    = 5'd13,
+    F_A4    = 5'd14,
+    F_A5    = 5'd15,
+    F_A6    = 5'd16,
+    F_A7    = 5'd17,
+
+    F_S2    = 5'd18,
+    F_S3    = 5'd19,
+    F_S4    = 5'd20,
+    F_S5    = 5'd21,
+    F_S6    = 5'd22,
+    F_S7    = 5'd23,
+    F_S8    = 5'd24,
+    F_S9    = 5'd25,
+    F_S10   = 5'd26,
+    F_S11   = 5'd27,
+
+    F_T8    = 5'd28,
+    F_T9    = 5'd29,
+    F_T10   = 5'd30,
+    F_T11   = 5'd31
+} fp_registers;
+
+
+
 // =============================================
 //
 //           INSTRUCTION DECODING ENUMS

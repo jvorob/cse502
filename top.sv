@@ -82,7 +82,6 @@ module top
     logic gen_id_bubble;
     logic gen_ex_bubble;
     logic gen_mem_bubble;
-    logic gen_wb_bubble;
 
     // wr_en
     logic id_wr_en;
@@ -130,6 +129,9 @@ module top
     logic [63:0] ID_out1;
     logic [63:0] ID_out2;
 
+    // Ecall values
+    logic [63:0] a0, a1, a2, a3, a4, a5, a6, a7;
+
     // === Enable RegFile writeback USING SIGNALS FROM WB STAGE
     logic writeback_en; // enables writeback to regfile
     assign writeback_en = WB_reg.curr_deco.en_rd && !WB_reg.bubble;  // dont write bubbles
@@ -146,7 +148,9 @@ module top
         .wb_en(writeback_en),
 
         .out1(ID_out1),
-        .out2(ID_out2)
+        .out2(ID_out2),
+
+        .a0(a0), .a1(a1), .a2(a2), .a3(a3), .a4(a4), .a5(a5), .a6(a6), .a7(a7)
     );
 
     //== Some dummy signals for debugging (since gtkwave can't show packed structs
@@ -299,6 +303,8 @@ module top
     logic haz_ex_stall;
     logic haz_mem_stall;
     logic haz_wb_stall;
+
+    logic flush_before_wb;
     
     hazard_unit haz(
         .ID_deco(ID_deco),
@@ -327,11 +333,12 @@ module top
         .mem_stall(haz_mem_stall),
         .wb_stall(haz_wb_stall),
 
+        .flush_before_wb(flush_before_wb),
+
         // Output gen bubbles
         .id_bubble(gen_id_bubble),
         .ex_bubble(gen_ex_bubble),
         .mem_bubble(gen_mem_bubble),
-        .wb_bubble(gen_wb_bubble),
 
         // Output wr_en
         .id_wr_en(id_wr_en),
@@ -356,7 +363,11 @@ module top
             counter <= 0;
         end
         else if (icache_valid) begin
-            if (ir == 0 && counter < 5) begin // === Run until we hit a 0x0000_0000 instruction (wait a few more cycles for pipeline to finish)
+            if (flush_before_wb) begin
+                // must refetch flushed instructions
+
+            end
+            else if (ir == 0 && counter < 5) begin // === Run until we hit a 0x0000_0000 instruction (wait a few more cycles for pipeline to finish)
                 counter <= counter + 1;
             end
             else if (counter == 5) begin

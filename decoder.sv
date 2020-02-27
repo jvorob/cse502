@@ -38,6 +38,9 @@ typedef struct packed {
 
     // - MISC_MEM: ??? TODO
     // - SYSTEM: ??? TODO
+    logic is_ecall;
+
+
 } decoded_inst_t;
 
 
@@ -101,6 +104,8 @@ module Decoder
 
         out.jump_if = JUMP_NO;
         out.jump_absolute = 0; // JAL and Branches are PC-relative, JALR is absolute
+
+        out.is_ecall = 0;
 
 
         // === MAIN DECODER:
@@ -230,12 +235,36 @@ module Decoder
 
             // ==== ETC: We dont want to implement these rn
 
-            OP_MISC_MEM, OP_SYSTEM: begin
+            OP_MISC_MEM: begin
                 out.immed = 0; // Might need to change this
                 out.funct7 = 0;
                 {out.en_rs1, out.en_rs2, out.en_rd } = 3'b000; // I think this is right?
             end
 
+            OP_SYSTEM: begin
+                out.immed = 0;
+                out.funct7 = 0;
+                { out.en_rs1, out.en_rs2, out.en_rd } = 3'b000;
+                
+                case (funct3) inside
+                    F3SYS_ECALL_EBREAK: begin
+                        if (immed_I[0] == 0) begin
+                            out.is_ecall = 1;
+                            
+                            // As specified for the fake-os hack, write ecall() returned results to
+                            // a0.
+                            out.en_rd = 1;
+                            out.rd = A0;
+                        end
+                        else if (immed_I[0] == 1)
+                            // ebreak
+                            // $display("ebreak");
+                        else begin
+                            // $display("Invalid instruction for opcode=OP_SYSTEM and funct3=F3_ECALL_EBREAK.");
+                        end
+                end
+            
+            // Technically, we want a default case to avoid inferred latches
         endcase
     end
 
