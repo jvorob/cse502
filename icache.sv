@@ -14,22 +14,22 @@ module Icache
     output          icache_valid,
 
     // AXI interface
-    output  reg  [ID_WIDTH-1:0]    m_axi_arid,
-    output  reg  [ADDR_WIDTH-1:0]  m_axi_araddr,
-    output  reg  [7:0]             m_axi_arlen,
-    output  reg  [2:0]             m_axi_arsize,
-    output  reg  [1:0]             m_axi_arburst,
-    output  reg                    m_axi_arlock,
-    output  reg  [3:0]             m_axi_arcache,
-    output  reg  [2:0]             m_axi_arprot,
-    output  wire                   m_axi_arvalid,
-    input   wire                   m_axi_arready,
-    input   wire [ID_WIDTH-1:0]    m_axi_rid,
-    input   wire [DATA_WIDTH-1:0]  m_axi_rdata,
-    input   wire [1:0]             m_axi_rresp,
-    input   wire                   m_axi_rlast,
-    input   wire                   m_axi_rvalid,
-    output  wire                   m_axi_rready
+    output  reg  [ID_WIDTH-1:0]    icache_m_axi_arid,
+    output  wire [ADDR_WIDTH-1:0]  icache_m_axi_araddr,
+    output  reg  [7:0]             icache_m_axi_arlen,
+    output  reg  [2:0]             icache_m_axi_arsize,
+    output  reg  [1:0]             icache_m_axi_arburst,
+    output  reg                    icache_m_axi_arlock,
+    output  reg  [3:0]             icache_m_axi_arcache,
+    output  reg  [2:0]             icache_m_axi_arprot,
+    output  wire                   icache_m_axi_arvalid,
+    input   wire                   icache_m_axi_arready,
+    input   wire [ID_WIDTH-1:0]    icache_m_axi_rid,
+    input   wire [DATA_WIDTH-1:0]  icache_m_axi_rdata,
+    input   wire [1:0]             icache_m_axi_rresp,
+    input   wire                   icache_m_axi_rlast,
+    input   wire                   icache_m_axi_rvalid,
+    output  wire                   icache_m_axi_rready
 );
     localparam WORD_LEN = 8; // number of bytes in word
     localparam LOG_WORD_LEN = 3; // log(number of bytes in word)
@@ -56,9 +56,9 @@ module Icache
 
     assign ir = sm_pc[LOG_WORD_LEN-1] ? mem[index][0][offset][63:32] : mem[index][0][offset][31:0];
     assign icache_valid = tag == line_tag[index][0] && line_valid[index][0];
-    assign m_axi_araddr = rplc_pc;
-    assign m_axi_arvalid = state == 3'h1;
-    assign m_axi_rready = state == 3'h2;
+    assign icache_m_axi_araddr = rplc_pc;
+    assign icache_m_axi_arvalid = state == 3'h1;
+    assign icache_m_axi_rready = state == 3'h2;
 
     always_ff @ (posedge clk) begin
         if (reset) begin
@@ -66,13 +66,13 @@ module Icache
             line_valid <= '{SETS{'{WAYS{1'b0}}}};
             rplc_pc <= 0;
             
-            m_axi_arid <= 0;      // transaction id
-            m_axi_arlen <= 8'h7;  // +1, =8 words requested
-            m_axi_arsize <= 3'h3; // 2^3, word width is 8 bytes
-            m_axi_arburst <= 2'h2;// 2 in enum, bursttype=wrap
-            m_axi_arlock <= 1'b0; // no lock
-            m_axi_arcache <= 4'h0;// no cache
-            m_axi_arprot <= 3'h6; // enum, means something
+            icache_m_axi_arid <= 0;      // transaction id
+            icache_m_axi_arlen <= 8'h7;  // +1, =8 words requested
+            icache_m_axi_arsize <= 3'h3; // 2^3, word width is 8 bytes
+            icache_m_axi_arburst <= 2'h2;// 2 in enum, bursttype=wrap
+            icache_m_axi_arlock <= 1'b0; // no lock
+            icache_m_axi_arcache <= 4'h0;// no cache
+            icache_m_axi_arprot <= 3'h6; // enum, means something
         end else begin
             case(state)
             3'h0: begin  // idle
@@ -85,14 +85,14 @@ module Icache
                 line_tag[rplc_index][0] <= rplc_tag;
                 line_valid[rplc_index][0] <= 1'b0;
                 rplc_offset <= rplc_pc[LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_WORD_LEN];
-                if(m_axi_arready)
+                if(icache_m_axi_arready)
                     state <= 3'h2;
             end
             3'h2: begin // data channel
-                if(m_axi_rvalid) begin
-                    mem[rplc_index][0][rplc_offset] <= m_axi_rdata;
+                if(icache_m_axi_rvalid) begin
+                    mem[rplc_index][0][rplc_offset] <= icache_m_axi_rdata;
                     rplc_offset <= rplc_offset + 1;
-                    if(m_axi_rlast) begin
+                    if(icache_m_axi_rlast) begin
                         line_valid[rplc_index][0] <= 1'b1;
                         state <= 3'h0;
                     end

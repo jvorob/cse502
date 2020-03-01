@@ -6,7 +6,8 @@
 `include "pipe_reg.sv"
 `include "hazard.sv"
 `include "icache.sv"
-//`include "dcache.sv"
+`include "dcache.sv"
+`include "axi_interconnect.sv"
 
 module top
 #(
@@ -44,14 +45,14 @@ module top
   input   wire [1:0]             m_axi_bresp,
   input   wire                   m_axi_bvalid,
   output  wire                   m_axi_bready,
-  output  reg  [ID_WIDTH-1:0]    m_axi_arid,
-  output  reg  [ADDR_WIDTH-1:0]  m_axi_araddr,
-  output  reg  [7:0]             m_axi_arlen,
-  output  reg  [2:0]             m_axi_arsize,
-  output  reg  [1:0]             m_axi_arburst,
-  output  reg                    m_axi_arlock,
-  output  reg  [3:0]             m_axi_arcache,
-  output  reg  [2:0]             m_axi_arprot,
+  output  wire [ID_WIDTH-1:0]    m_axi_arid,
+  output  wire [ADDR_WIDTH-1:0]  m_axi_araddr,
+  output  wire [7:0]             m_axi_arlen,
+  output  wire [2:0]             m_axi_arsize,
+  output  wire [1:0]             m_axi_arburst,
+  output  wire                   m_axi_arlock,
+  output  wire [3:0]             m_axi_arcache,
+  output  wire [2:0]             m_axi_arprot,
   output  wire                   m_axi_arvalid,
   input   wire                   m_axi_arready,
   input   wire [ID_WIDTH-1:0]    m_axi_rid,
@@ -96,6 +97,23 @@ module top
 	logic flush_before_ex;	// Used for jumps/branches
 
     // ------------------------BEGIN IF STAGE--------------------------
+ 
+    wire [ID_WIDTH-1:0]     icache_m_axi_arid;
+    wire [ADDR_WIDTH-1:0]   icache_m_axi_araddr;
+    wire [7:0]              icache_m_axi_arlen;
+    wire [2:0]              icache_m_axi_arsize;
+    wire [1:0]              icache_m_axi_arburst;
+    wire                    icache_m_axi_arlock;
+    wire [3:0]              icache_m_axi_arcache;
+    wire [2:0]              icache_m_axi_arprot;
+    wire                    icache_m_axi_arvalid;
+    wire                    icache_m_axi_arready;
+    wire [ID_WIDTH-1:0]     icache_m_axi_rid;
+    wire [DATA_WIDTH-1:0]   icache_m_axi_rdata;
+    wire [1:0]              icache_m_axi_rresp;
+    wire                    icache_m_axi_rlast;
+    wire                    icache_m_axi_rvalid;
+    wire                    icache_m_axi_rready;
 
     Icache icache (.*);
 
@@ -272,6 +290,54 @@ module top
 
     //TODO: noop for now, otherwise compute some result for mem stuff
 
+    wire [ID_WIDTH-1:0]     dcache_m_axi_awid;
+    wire [ADDR_WIDTH-1:0]   dcache_m_axi_awaddr;
+    wire [7:0]              dcache_m_axi_awlen;
+    wire [2:0]              dcache_m_axi_awsize;
+    wire [1:0]              dcache_m_axi_awburst;
+    wire                    dcache_m_axi_awlock;
+    wire [3:0]              dcache_m_axi_awcache;
+    wire [2:0]              dcache_m_axi_awprot;
+    wire                    dcache_m_axi_awvalid;
+    wire                    dcache_m_axi_awready;
+    wire [DATA_WIDTH-1:0]   dcache_m_axi_wdata;
+    wire [STRB_WIDTH-1:0]   dcache_m_axi_wstrb;
+    wire                    dcache_m_axi_wlast;
+    wire                    dcache_m_axi_wvalid;
+    wire                    dcache_m_axi_wready;
+    wire [ID_WIDTH-1:0]     dcache_m_axi_bid;
+    wire [1:0]              dcache_m_axi_bresp;
+    wire                    dcache_m_axi_bvalid;
+    wire                    dcache_m_axi_bready;
+    wire [ID_WIDTH-1:0]     dcache_m_axi_arid;
+    wire [ADDR_WIDTH-1:0]   dcache_m_axi_araddr;
+    wire [7:0]              dcache_m_axi_arlen;
+    wire [2:0]              dcache_m_axi_arsize;
+    wire [1:0]              dcache_m_axi_arburst;
+    wire                    dcache_m_axi_arlock;
+    wire [3:0]              dcache_m_axi_arcache;
+    wire [2:0]              dcache_m_axi_arprot;
+    wire                    dcache_m_axi_arvalid;
+    wire                    dcache_m_axi_arready;
+    wire [ID_WIDTH-1:0]     dcache_m_axi_rid;
+    wire [DATA_WIDTH-1:0]   dcache_m_axi_rdata;
+    wire [1:0]              dcache_m_axi_rresp;
+    wire                    dcache_m_axi_rlast;
+    wire                    dcache_m_axi_rvalid;
+    wire                    dcache_m_axi_rready;
+
+    Dcache dcache (
+        .addr(),
+        .wdata(),
+        .wlen(),
+        .dcache_enable(),
+        .wrn(),
+        .rdata(),
+        .dcache_valid(),
+        .write_done(),
+        .*
+    );
+
     // ------------------------END MEM STAGE----------------------------
 
     WB_reg WB_reg(
@@ -386,6 +452,8 @@ module top
 
 
     assign enable_execute = icache_valid;
+
+    AXI_interconnect axi_interconnect (.*);
 
     always_ff @ (posedge clk) begin
         if (sm_pc[1:0] != 2'b00) 
