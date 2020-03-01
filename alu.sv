@@ -96,7 +96,8 @@ module Alu
             // =============================================
             //               32-BIT wide ops
             //
-            end else begin // width_32 == 1
+        end
+		else begin // width_32 == 1
             case (funct7) inside
 
                 // === 32-bit Normal OPs

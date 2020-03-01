@@ -6,6 +6,7 @@
 `include "pipe_reg.sv"
 `include "hazard.sv"
 `include "icache.sv"
+//`include "dcache.sv"
 
 module top
 #(
@@ -82,12 +83,17 @@ module top
     logic gen_id_bubble;
     logic gen_ex_bubble;
     logic gen_mem_bubble;
+	logic gen_wb_bubble;
 
     // wr_en
     logic id_wr_en;
     logic ex_wr_en;
     logic mem_wr_en;
     logic wb_wr_en;
+
+	// flush signals
+    logic flush_before_wb;	// Used for ecall
+	logic flush_before_ex;	// Used for jumps/branches
 
     // ------------------------BEGIN IF STAGE--------------------------
 
@@ -118,7 +124,6 @@ module top
     // Components decoded from cur_inst, set by decoder
     decoded_inst_t ID_deco; 
 
-
     Decoder d(
         .inst(ID_reg.curr_inst),
 
@@ -134,7 +139,10 @@ module top
 
     // === Enable RegFile writeback USING SIGNALS FROM WB STAGE
     logic writeback_en; // enables writeback to regfile
-    assign writeback_en = WB_reg.curr_deco.en_rd && !WB_reg.bubble;  // dont write bubbles
+	logic [63:0] WB_result;
+	logic [4:0] WB_rd;
+	logic WB_en_rd;
+    assign writeback_en = WB_en_rd && !WB_reg.bubble && !gen_wb_bubble;  // dont write bubbles
 
     RegFile rf(
         .clk(clk),
@@ -143,7 +151,7 @@ module top
         .read_addr1(ID_deco.rs1),
         .read_addr2(ID_deco.rs2),
 
-        .wb_addr(WB_reg.curr_deco.rd),
+        .wb_addr(WB_rd),
         .wb_data(WB_result),
         .wb_en(writeback_en),
 
@@ -216,11 +224,13 @@ module top
 
     always_comb begin
         case (EX_deco.jump_if) inside
-            JUMP_NO:      do_jump = 0;
-            JUMP_YES:     do_jump = 1;
-            JUMP_ALU_EQZ: do_jump = (alu_out == 0);
-            JUMP_ALU_NEZ: do_jump = (alu_out != 0);
+			JUMP_NO:		do_jump = 0;
+			JUMP_YES:		do_jump = 1;
+			JUMP_ALU_EQZ:	do_jump = (alu_out == 0);
+			JUMP_ALU_NEZ:	do_jump = (alu_out != 0);
         endcase
+		
+		flush_before_ex = do_jump;
     end
 
 
@@ -287,13 +297,34 @@ module top
     );
 
     // ------------------------BEGIN WB STAGE---------------------------
-    
-    logic [63:0] WB_result;
-    assign WB_result = WB_reg.curr_alu_result;
 
-    logic [4:0] WB_rd = WB_reg.curr_deco.rd;
-    logic WB_en_rd = WB_reg.curr_deco.en_rd;
-    //TODO: set proper regfile writeback: switch btwn ALU and mem
+	logic ecall_stall;
+
+	wb_stage wb(
+		.clk(clk),
+		.reset(reset),
+		
+		.a0(a0),
+		.a1(a1),
+		.a2(a2),
+		.a3(a3),
+		.a4(a4),
+		.a5(a5),
+		.a6(a6),
+		.a7(a7),
+		
+		.is_bubble(WB_reg.bubble),
+
+		.alu_result(WB_reg.curr_alu_result),
+		.mem_result(WB_reg.curr_mem_result),
+		.inst(WB_reg.curr_deco),
+		
+		.result(WB_result),
+		.rd(WB_rd),
+		.en_rd(WB_en_rd),
+
+		.ecall_stall(ecall_stall)
+	);
 
     // ------------------------END WB STAGE-----------------------------
     
@@ -303,8 +334,6 @@ module top
     logic haz_ex_stall;
     logic haz_mem_stall;
     logic haz_wb_stall;
-
-    logic flush_before_wb;
     
     hazard_unit haz(
         .ID_deco(ID_deco),
@@ -315,9 +344,15 @@ module top
 
         .MEM_deco(MEM_reg.curr_deco),
         .mem_bubble(MEM_reg.bubble),
+		
+		.dcache_valid(),
+		.write_done(),
+		.dcache_enable(),
 
         .WB_deco(WB_reg.curr_deco),
         .wb_bubble(WB_reg.bubble),
+
+		.ecall_stall(ecall_stall),
 
         // Outputs stalls at corresponding locations
         .id_stall(haz_id_stall),
@@ -334,11 +369,13 @@ module top
         .wb_stall(haz_wb_stall),
 
         .flush_before_wb(flush_before_wb),
+		.flush_before_ex(flush_before_ex),
 
         // Output gen bubbles
         .id_bubble(gen_id_bubble),
         .ex_bubble(gen_ex_bubble),
         .mem_bubble(gen_mem_bubble),
+		.wb_bubble(gen_wb_bubble),
 
         // Output wr_en
         .id_wr_en(id_wr_en),
@@ -355,6 +392,9 @@ module top
             $error("ERROR: executing unaligned instruction at PC=%x", sm_pc);
     end
 
+	// This is used to let the instructions in the middle of the pipeline finish
+	// executing before we stop. This is because there might still be instructions in the
+	// pipeline partially executed after hitting the end of the program with sm_pc.
     logic [2:0] counter;
 
     always_ff @ (posedge clk) begin
@@ -364,9 +404,22 @@ module top
         end
         else if (icache_valid) begin
             if (flush_before_wb) begin
-                // must refetch flushed instructions
-
+                counter <= 0;
+				// Must refetch flushed instructions.
+				// Currently, only ecall will make use of this.
+				sm_pc <= MEM_reg.curr_pc;
             end
+			else if (flush_before_ex) begin
+				counter <= 0;
+				// Must refetch flushed instructions.
+				// Currently, only branches/jumps will make use of this.
+				if (do_jump) begin
+					sm_pc <= jump_target_address;
+				end
+				else begin
+					sm_pc <= ID_reg.curr_pc;
+				end
+			end
             else if (ir == 0 && counter < 5) begin // === Run until we hit a 0x0000_0000 instruction (wait a few more cycles for pipeline to finish)
                 counter <= counter + 1;
             end
@@ -375,11 +428,10 @@ module top
                 $display("    PC = 0x%0x", pc);
                     for(int i = 0; i < 32; i++)
                     $display("    r%2.2d: %10d (0x%x)", i, rf.regs[i], rf.regs[i]);
-            
-
                 $finish;
             end
             else begin
+				counter <= 0;
                 if (do_jump) begin
                     sm_pc <= jump_target_address;
                 end 

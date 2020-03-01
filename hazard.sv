@@ -13,9 +13,16 @@ module hazard_unit(
     input decoded_inst_t MEM_deco,
     input mem_bubble,
 
+	// signals from d-cache
+	input dcache_valid,
+	input write_done,
+	input dcache_enable,
+
     // signals from MEM/WB Reg
     input decoded_inst_t WB_deco,
     input wb_bubble,
+
+	input ecall_stall,
 
     output id_stall,
     output ex_stall,
@@ -41,10 +48,14 @@ module hazard_unit(
     // MEM signals 
     logic [4:0] mem_rd;
     logic mem_en_rd;
+	logic mem_is_store;
+	logic mem_is_load;
 
     assign mem_rd = MEM_deco.rd;
     assign mem_en_rd = MEM_deco.en_rd;
-    
+    assign mem_is_store = MEM_deco.is_store;
+	assign mem_is_load = MEM_deco.is_load;
+
     // WB signals
     logic [4:0] wb_rd;
     logic wb_en_rd;
@@ -73,7 +84,7 @@ module hazard_unit(
     end
 
     assign ex_stall = 0;
-    assign mem_stall = 0;
-    assign wb_stall = 0;
+    assign mem_stall = ((mem_is_load) && (!dcache_valid)) || ((mem_is_store) && (!write_done)) && dcache_enable;
+    assign wb_stall = ecall_stall;
 endmodule
 

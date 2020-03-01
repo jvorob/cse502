@@ -34,7 +34,8 @@ typedef struct packed {
     logic jump_absolute; // JAL/Branches are PC-relative (jumpt to imm+PC), JALR is absolute (jump to ALU-result)
 
     // == Mem stage?
-    // TODO
+    logic is_store;
+	logic is_load;
 
     // - MISC_MEM: ??? TODO
     // - SYSTEM: ??? TODO
@@ -106,7 +107,8 @@ module Decoder
         out.jump_absolute = 0; // JAL and Branches are PC-relative, JALR is absolute
 
         out.is_ecall = 0;
-
+		out.is_load = 0;
+		out.is_store = 0;
 
         // === MAIN DECODER:
         // Determine immediate values, and which of rs1,rs2,and rd we're using
@@ -195,7 +197,7 @@ module Decoder
                 out.alu_use_immed = 1;
                 out.funct7 = 0;
                 out.funct3 = F3OP_ADD_SUB; //ALU does rs1+immed (load-addr)
-
+				out.is_load = 1;
                 {out.en_rs1, out.en_rs2, out.en_rd } = 3'b101; // src mem + dest reg
             end
 
@@ -204,7 +206,7 @@ module Decoder
                 out.alu_use_immed = 1;
                 out.funct7 = 0;
                 out.funct3 = F3OP_ADD_SUB; //ALU does rs1+immed (store-addr)
-
+				out.is_store = 1;
                 {out.en_rs1, out.en_rs2, out.en_rd } = 3'b110; // 2 src mem addr
                 //TODO: make sure Mem gets rs2 (that's the data to be stored)
                 //TODO: can optimize, we dont need rs2 until mem stage, so can loosen hazard
@@ -256,14 +258,16 @@ module Decoder
                             out.en_rd = 1;
                             out.rd = A0;
                         end
-                        else if (immed_I[0] == 1)
+                        else if (immed_I[0] == 1) begin
                             // ebreak
                             // $display("ebreak");
+						end
                         else begin
                             // $display("Invalid instruction for opcode=OP_SYSTEM and funct3=F3_ECALL_EBREAK.");
                         end
-                end
-            
+					end
+                endcase
+            end
             // Technically, we want a default case to avoid inferred latches
         endcase
     end

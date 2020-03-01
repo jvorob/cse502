@@ -30,7 +30,7 @@ module RegFile
 
     // For ecall
     assign a0 = regs[A0];
-    assign a1 = regs[A1]
+    assign a1 = regs[A1];
     assign a2 = regs[A2];
     assign a3 = regs[A3];
     assign a4 = regs[A4];

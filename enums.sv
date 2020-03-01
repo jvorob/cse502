@@ -11,6 +11,14 @@
 //
 // =============================================
 
+// AXI Enums
+typedef enum bit[1:0] {
+	FIXED		= 2'b00,
+	INCR		= 2'b01,
+	WRAP		= 2'b10,
+	RESERVED	= 2'b11
+} AxBURST; // ARBURST or AWBURST
+
 
 // == Enables branch, conditionally or unconditionally
 typedef enum bit[1:0] {
