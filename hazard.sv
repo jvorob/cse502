@@ -23,6 +23,8 @@ module hazard_unit(
     input wb_bubble,
 
 	input ecall_stall,
+    input wb_is_ecall,
+    output flush_before_wb,
 
     output id_stall,
     output ex_stall,
@@ -86,5 +88,6 @@ module hazard_unit(
     assign ex_stall = 0;
     assign mem_stall = ((mem_is_load) && (!dcache_valid)) || ((mem_is_store) && (!write_done)) && dcache_enable;
     assign wb_stall = ecall_stall;
+    assign flush_before_wb = wb_is_ecall;
 endmodule
 

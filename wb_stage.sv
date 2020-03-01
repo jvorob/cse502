@@ -15,8 +15,8 @@ module wb_stage
 
 	input is_bubble,
 
-	input alu_result,
-	input mem_result,
+	input [63:0] alu_result,
+	input [63:0] mem_result,
 	input decoded_inst_t inst,	// instruction in WB stage
 
 	output logic [63:0] result,
@@ -51,6 +51,10 @@ module wb_stage
 			ecall_stall = 0;
 		end
 	end
+
+    // Currently we are flushing everything before WB while WB contains
+    // an ecall instruction. Might be able to modify it to flush when
+    // has_ecall_executed == 1.
 
 	always_ff @(posedge clk) begin
 		if (reset) begin

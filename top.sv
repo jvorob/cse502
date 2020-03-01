@@ -67,6 +67,11 @@ module top
   input   wire [3:0]             m_axi_acsnoop
 );
 
+	// This is used to let the instructions in the middle of the pipeline finish
+	// executing before we stop. This is because there might still be instructions in the
+	// pipeline partially executed after hitting the end of the program with sm_pc.
+    logic [2:0] counter;
+    
     logic [63:0] sm_pc; //PC of axi-fetching state machine
     logic [31:0] ir;
     logic icache_valid;
@@ -229,6 +234,8 @@ module top
         .funct7  (EX_deco.funct7),
         .width_32(EX_deco.alu_width_32),
         .op(0), // This is unused I think?
+        .is_load(EX_deco.is_load),
+        .is_store(EX_deco.is_store),
 
         .result(alu_out)
     );
@@ -248,7 +255,12 @@ module top
 			JUMP_ALU_NEZ:	do_jump = (alu_out != 0);
         endcase
 		
-		flush_before_ex = do_jump;
+        if (counter != 1) begin
+    		flush_before_ex = do_jump;
+        end
+        else begin
+            flush_before_ex = 0;
+        end
     end
 
 
@@ -276,7 +288,7 @@ module top
         .next_pc(EX_reg.curr_pc),
         .next_deco(EX_deco), // includes pc & immed
         .next_data(exec_result),  // result from ALU or other primary value
-        .next_data2(0 /*TODO*/), // extra value if needed (e.g. for stores, etc)
+        .next_data2(EX_reg.curr_val_rs2), // extra value if needed (e.g. for stores, etc)
 
         // Data signals for current MEM step
         .curr_pc(),
@@ -288,8 +300,7 @@ module top
 
     // ------------------------BEGIN MEM STAGE--------------------------
 
-    //TODO: noop for now, otherwise compute some result for mem stuff
-
+    // AXI signals
     wire [ID_WIDTH-1:0]     dcache_m_axi_awid;
     wire [ADDR_WIDTH-1:0]   dcache_m_axi_awaddr;
     wire [7:0]              dcache_m_axi_awlen;
@@ -326,15 +337,53 @@ module top
     wire                    dcache_m_axi_rvalid;
     wire                    dcache_m_axi_rready;
 
+    logic dcache_en;
+    logic dcache_valid;
+    logic write_done;
+    logic [63:0] mem_rdata, mem_ex_rdata;
+    
+    logic mem_store;
+    logic mem_load;
+    assign mem_store = MEM_reg.curr_deco.is_store;
+    assign mem_load = MEM_reg.curr_deco.is_load;
+
+    assign dcache_en = (mem_load || mem_store) && !MEM_reg.bubble;
+
+    logic [63:0] mem_wr_data;
+  
+    always_comb begin
+        // This case only matters for stores
+        case (MEM_reg.curr_deco.funct3)
+            F3LS_B: mem_wr_data = MEM_reg.curr_data2[7:0];
+            F3LS_H: mem_wr_data = MEM_reg.curr_data2[15:0];
+            F3LS_W: mem_wr_data = MEM_reg.curr_data2[31:0];
+            F3LS_D: mem_wr_data = MEM_reg.curr_data2[63:0];
+            default: mem_wr_data = MEM_reg.curr_data2[63:0];
+        endcase
+
+        // This only matters for loads
+        case (MEM_reg.curr_deco.funct3)
+            // load signed
+            F3LS_B: mem_ex_rdata = { {56{mem_rdata[7]}}, mem_rdata[7:0] };
+            F3LS_H: mem_ex_rdata = { {48{mem_rdata[15]}}, mem_rdata[15:0] };
+            F3LS_W: mem_ex_rdata = { {32{mem_rdata[31]}}, mem_rdata[31:0] };
+            // load unsigned
+            F3LS_BU: mem_ex_rdata = { 56'd0, mem_rdata[7:0] };
+            F3LS_HU: mem_ex_rdata = { 48'd0, mem_rdata[15:0] };
+            F3LS_WU: mem_ex_rdata = { 32'd0, mem_rdata[31:0] };
+            default: mem_ex_rdata = mem_rdata;
+        endcase
+    end
+
     Dcache dcache (
-        .addr(),
-        .wdata(),
-        .wlen(),
-        .dcache_enable(),
-        .wrn(),
-        .rdata(),
-        .dcache_valid(),
-        .write_done(),
+        .addr(MEM_reg.curr_data),
+        .wdata(mem_wr_data),
+        .wlen(MEM_reg.curr_deco.funct3[1:0]),
+        .dcache_enable(dcache_en),
+        .wrn(mem_store),
+        .rdata(mem_rdata),
+        .dcache_valid(dcache_valid),
+        .write_done(write_done),
         .*
     );
 
@@ -353,7 +402,7 @@ module top
         .next_pc(MEM_reg.curr_pc),
         .next_deco(MEM_reg.curr_deco),
         .next_alu_result(MEM_reg.curr_data),
-        .next_mem_result(0 /*TODO*/),
+        .next_mem_result(mem_ex_rdata),
 
         // Data signals for current WB step
         .curr_pc(),
@@ -411,14 +460,16 @@ module top
         .MEM_deco(MEM_reg.curr_deco),
         .mem_bubble(MEM_reg.bubble),
 		
-		.dcache_valid(),
-		.write_done(),
-		.dcache_enable(),
+		.dcache_valid(dcache_valid),
+		.write_done(write_done),
+		.dcache_enable(dcache_en),
 
         .WB_deco(WB_reg.curr_deco),
         .wb_bubble(WB_reg.bubble),
 
 		.ecall_stall(ecall_stall),
+        .wb_is_ecall(WB_reg.curr_deco.is_ecall),
+        .flush_before_wb(flush_before_wb),
 
         // Outputs stalls at corresponding locations
         .id_stall(haz_id_stall),
@@ -463,7 +514,7 @@ module top
 	// This is used to let the instructions in the middle of the pipeline finish
 	// executing before we stop. This is because there might still be instructions in the
 	// pipeline partially executed after hitting the end of the program with sm_pc.
-    logic [2:0] counter;
+    // logic [2:0] counter;
 
     always_ff @ (posedge clk) begin
         if (reset) begin
@@ -500,10 +551,7 @@ module top
             end
             else begin
 				counter <= 0;
-                if (do_jump) begin
-                    sm_pc <= jump_target_address;
-                end 
-                else if (!id_wr_en) begin
+                if (!id_wr_en) begin
                     sm_pc <= sm_pc;
                 end
                 else begin

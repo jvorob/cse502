@@ -10,6 +10,9 @@ module Alu
     input width_32, //set for OP_32 instructions
     input [6:0] op,
 
+    input is_load,
+    input is_store,
+
     output [63:0] result
 );
 
@@ -26,7 +29,10 @@ module Alu
 
     always_comb begin
 
-        if (!width_32) begin
+        if (is_load || is_store) begin
+            result = a + b;
+        end
+        else if (!width_32) begin
             case (funct7) inside
 
                 // ===== Normal ALU OPs

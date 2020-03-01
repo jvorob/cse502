@@ -195,17 +195,20 @@ module Decoder
             OP_LOAD: begin
                 out.immed = immed_I;
                 out.alu_use_immed = 1;
-                out.funct7 = 0;
-                out.funct3 = F3OP_ADD_SUB; //ALU does rs1+immed (load-addr)
+//                out.funct7 = 0;
+//                out.funct3 = F3OP_ADD_SUB; //ALU does rs1+immed (load-addr)
 				out.is_load = 1;
                 {out.en_rs1, out.en_rs2, out.en_rd } = 3'b101; // src mem + dest reg
+
+                
+
             end
 
             OP_STORE: begin
                 out.immed = immed_S;
                 out.alu_use_immed = 1;
-                out.funct7 = 0;
-                out.funct3 = F3OP_ADD_SUB; //ALU does rs1+immed (store-addr)
+//                out.funct7 = 0;
+//                out.funct3 = F3OP_ADD_SUB; //ALU does rs1+immed (store-addr)
 				out.is_store = 1;
                 {out.en_rs1, out.en_rs2, out.en_rd } = 3'b110; // 2 src mem addr
                 //TODO: make sure Mem gets rs2 (that's the data to be stored)

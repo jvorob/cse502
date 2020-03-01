@@ -227,6 +227,6 @@ typedef enum bit[2:0] {
     F3LS_D        = 3'b011,
     F3LS_BU       = 3'b100,
     F3LS_HU       = 3'b101,
-    F3LS_WU       = 3'b110,
-    F3LS_DU       = 3'b111
+    F3LS_WU       = 3'b110
 } Funct3_LoadStore;
+
