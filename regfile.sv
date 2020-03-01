@@ -3,11 +3,14 @@ module RegFile
 (
     input clk,
     input reset,
+    input [63:0] stackptr,
+
     input [4:0] read_addr1,
     input [4:0] read_addr2,
     input [4:0] wb_addr,
     input [63:0] wb_data,
     input wb_en,
+
     output [63:0] out1,
     output [63:0] out2,
 
@@ -40,9 +43,11 @@ module RegFile
 
 
     always_ff @(posedge clk) begin
-        if (reset)
+        if (reset) begin
             for (i = 0; i < 32; i = i + 1)
                 regs[i] <= 64'h0000_0000_0000_0000;
+            regs[SP] <= stackptr;
+        end
         else if (wb_en)
             if (wb_addr == 0)
                 regs[wb_addr] <= 0; // not actually needed, but it makes debugging a little cleaner

@@ -170,6 +170,7 @@ module top
     RegFile rf(
         .clk(clk),
         .reset(reset),
+        .stackptr(stackptr),
 
         .read_addr1(ID_deco.rs1),
         .read_addr2(ID_deco.rs2),
