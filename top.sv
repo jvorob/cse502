@@ -86,6 +86,7 @@ module top
     
     // Traffic controller signals:
     // gen_bubble
+    logic gen_if_bubble;
     logic gen_id_bubble;
     logic gen_ex_bubble;
     logic gen_mem_bubble;
@@ -130,7 +131,7 @@ module top
 
         //traffic signals
         .wr_en(id_wr_en),
-        .gen_bubble(!icache_valid), // if no instruction, pipeline gets bubble (TODO TEMP)
+        .gen_bubble(!icache_valid || gen_if_bubble), // if no instruction, pipeline gets bubble (TODO TEMP)
         .bubble(),
 
         // incoming signals for next step's ID
@@ -459,6 +460,7 @@ module top
 		.flush_before_ex(flush_before_ex),
 
         // Output gen bubbles
+        .if_bubble(gen_if_bubble),
         .id_bubble(gen_id_bubble),
         .ex_bubble(gen_ex_bubble),
         .mem_bubble(gen_mem_bubble),
@@ -488,6 +490,7 @@ module top
 
     always_ff @ (posedge clk) begin
         if (reset) begin
+            $display("Entry: %x", entry);
             sm_pc <= entry;
             counter <= 0;
         end
