@@ -135,7 +135,7 @@ module AXI_interconnect
     assign m_axi_arprot = icache_m_axi_arvalid ? icache_m_axi_arprot : dcache_m_axi_arprot;
     assign m_axi_arvalid = icache_m_axi_arvalid | dcache_m_axi_arvalid;
     assign icache_m_axi_arready = icache_m_axi_arvalid ? m_axi_arready : 1'b0;
-    assign dcache_m_axi_arready = icache_m_axi_arvalid ? m_axi_arready : 1'b0;
+    assign dcache_m_axi_arready = icache_m_axi_arvalid ? 1'b0 : m_axi_arready;
 
     // read channel
     assign icache_m_axi_rid = m_axi_rid;
