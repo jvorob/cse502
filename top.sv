@@ -340,6 +340,8 @@ module top
 
     logic [63:0] mem_ex_rdata;   // Properly extended rdata
     logic dcache_en;
+    logic dcache_valid;
+    logic write_done;
 
     mem_stage mem(
         .clk(clk),
@@ -348,6 +350,8 @@ module top
         .ex_data(MEM_reg.curr_data),
         .ex_data2(MEM_reg.curr_data2),
         .is_bubble(MEM_reg.bubble),
+        .dcache_valid(dcache_valid),
+        .write_done(write_done),
         .dcache_en(dcache_en),
         .mem_ex_rdata(mem_ex_rdata),
         .*

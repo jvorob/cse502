@@ -15,6 +15,8 @@ module mem_stage
     input [63:0] ex_data2,
     input is_bubble,
 
+    output dcache_valid,
+    output write_done,
     output logic dcache_en,
     output [63:0] mem_ex_rdata,
 
@@ -55,8 +57,6 @@ module mem_stage
     wire                    dcache_m_axi_rvalid,
     wire                    dcache_m_axi_rready
 );
-    logic dcache_valid; 
-    logic write_done;
     logic [63:0] mem_rdata;
     logic [63:0] mem_wr_data; // Write data
 
