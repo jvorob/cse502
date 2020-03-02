@@ -338,53 +338,18 @@ module top
     wire                    dcache_m_axi_rvalid;
     wire                    dcache_m_axi_rready;
 
+    logic [63:0] mem_ex_rdata;   // Properly extended rdata
     logic dcache_en;
-    logic dcache_valid;
-    logic write_done;
-    logic [63:0] mem_rdata, mem_ex_rdata;
-    
-    logic mem_store;
-    logic mem_load;
-    assign mem_store = MEM_reg.curr_deco.is_store;
-    assign mem_load = MEM_reg.curr_deco.is_load;
 
-    assign dcache_en = (mem_load || mem_store) && !MEM_reg.bubble;
-
-    logic [63:0] mem_wr_data;
-  
-    always_comb begin
-        // This case only matters for stores
-        case (MEM_reg.curr_deco.funct3)
-            F3LS_B: mem_wr_data = MEM_reg.curr_data2[7:0];
-            F3LS_H: mem_wr_data = MEM_reg.curr_data2[15:0];
-            F3LS_W: mem_wr_data = MEM_reg.curr_data2[31:0];
-            F3LS_D: mem_wr_data = MEM_reg.curr_data2[63:0];
-            default: mem_wr_data = MEM_reg.curr_data2[63:0];
-        endcase
-
-        // This only matters for loads
-        case (MEM_reg.curr_deco.funct3)
-            // load signed
-            F3LS_B: mem_ex_rdata = { {56{mem_rdata[7]}}, mem_rdata[7:0] };
-            F3LS_H: mem_ex_rdata = { {48{mem_rdata[15]}}, mem_rdata[15:0] };
-            F3LS_W: mem_ex_rdata = { {32{mem_rdata[31]}}, mem_rdata[31:0] };
-            // load unsigned
-            F3LS_BU: mem_ex_rdata = { 56'd0, mem_rdata[7:0] };
-            F3LS_HU: mem_ex_rdata = { 48'd0, mem_rdata[15:0] };
-            F3LS_WU: mem_ex_rdata = { 32'd0, mem_rdata[31:0] };
-            default: mem_ex_rdata = mem_rdata;
-        endcase
-    end
-
-    Dcache dcache (
-        .addr(MEM_reg.curr_data),
-        .wdata(mem_wr_data),
-        .wlen(MEM_reg.curr_deco.funct3[1:0]),
-        .dcache_enable(dcache_en),
-        .wrn(mem_store),
-        .rdata(mem_rdata),
-        .dcache_valid(dcache_valid),
-        .write_done(write_done),
+    mem_stage mem(
+        .clk(clk),
+        .reset(reset),
+        .inst(MEM_reg.curr_deco),
+        .ex_data(MEM_reg.curr_data),
+        .ex_data2(MEM_reg.curr_data2),
+        .is_bubble(MEM_reg.bubble),
+        .dcache_en(dcache_en),
+        .mem_ex_rdata(mem_ex_rdata),
         .*
     );
 
