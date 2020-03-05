@@ -217,7 +217,16 @@ module top
 
     // -----------------------BEGIN EX STAGE----------------------------
 
-    decoded_inst_t EX_deco;
+	// debugging
+	logic [1:0] jump_if = EX_deco.jump_if;
+	logic is_jump = EX_deco.is_jump;
+	logic is_branch = EX_deco.is_branch;
+    logic [63:0] ex_immed = EX_deco.immed;
+	logic ex_use_immed = EX_deco.alu_use_immed;
+	logic [63:0] ex_val_2 = EX_reg.curr_val_rs2;
+
+	
+	decoded_inst_t EX_deco;
     assign EX_deco = EX_reg.curr_deco;
 
     // == ALU signals
@@ -238,13 +247,16 @@ module top
         .op(0), // This is unused I think?
         .is_load(EX_deco.is_load),
         .is_store(EX_deco.is_store),
-
-        .result(alu_out)
+		.is_jump(EX_deco.is_jump),
+		.is_branch(EX_deco.is_branch),
+        .add_operation(EX_deco.add_operation),
+		.result(alu_out)
     );
 
     // Jump logic
     logic [63:0] jump_target_address;
     logic do_jump;
+
 
     // mask off bottommost bit of jump target: (according to RISCV spec)
     assign jump_target_address = (EX_deco.jump_absolute ? alu_out : (EX_reg.curr_pc + EX_deco.immed)) & ~64'b1;
@@ -255,7 +267,8 @@ module top
 			JUMP_YES:		do_jump = 1;
 			JUMP_ALU_EQZ:	do_jump = (alu_out == 0);
 			JUMP_ALU_NEZ:	do_jump = (alu_out != 0);
-        endcase
+			default:		do_jump = 0;
+		endcase
 		
         if (counter != 1) begin
     		flush_before_ex = do_jump;
@@ -267,8 +280,22 @@ module top
 
 
     logic [63:0] exec_result;
-    assign exec_result = EX_deco.keep_pc_plus_immed ? EX_reg.curr_pc + EX_deco.immed : alu_out;
-
+	always_comb begin
+		if (EX_deco.is_jump) begin
+			exec_result = EX_reg.curr_pc + 4;
+		end
+		else if (EX_deco.is_branch) begin
+			exec_result = alu_out;
+		end
+		else begin
+			if (EX_deco.keep_pc_plus_immed) begin
+				exec_result = EX_reg.curr_pc + EX_deco.immed;
+			end
+			else begin
+				exec_result = alu_out;
+			end
+		end
+	end
 
     //== Some dummy signals for debugging (since gtkwave can't show packed structs
     logic [63:0] EX_immed = EX_deco.immed;
@@ -499,7 +526,9 @@ module top
                 counter <= 0;
 				// Must refetch flushed instructions.
 				// Currently, only ecall will make use of this.
-				sm_pc <= MEM_reg.curr_pc;
+				
+				sm_pc <= WB_reg.curr_pc+4;
+				//sm_pc <= MEM_reg.curr_pc;
             end
 			else if (flush_before_ex) begin
 				counter <= 0;
@@ -509,7 +538,8 @@ module top
 					sm_pc <= jump_target_address;
 				end
 				else begin
-					sm_pc <= ID_reg.curr_pc;
+					// sm_pc <= ID_reg.curr_pc;
+					sm_pc <= EX_reg.curr_pc + 4;
 				end
 			end
             else if (ir == 0 && counter < 5) begin // === Run until we hit a 0x0000_0000 instruction (wait a few more cycles for pipeline to finish)

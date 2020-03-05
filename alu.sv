@@ -12,6 +12,9 @@ module Alu
 
     input is_load,
     input is_store,
+	input is_jump,
+	input is_branch,
+	input add_operation,
 
     output [63:0] result
 );
@@ -29,7 +32,24 @@ module Alu
 
     always_comb begin
 
-        if (is_load || is_store) begin
+		if (add_operation) begin
+			result = a + b;
+		end
+		else if (is_jump) begin
+			result = a + b;
+		end
+		else if (is_branch) begin
+			case (funct3) inside
+				F3B_BEQ, F3B_BNE: result = a + b;
+				F3B_BLT, F3B_BGE: result = (a_sig < b_sig) ? 1 : 0;
+				F3B_BLTU, F3B_BGEU: result = a < b ? 1 : 0;
+				default: begin
+					result = 0;
+					$display("ERROR: Invalid branch funct3");
+				end
+			endcase
+		end
+		else if (is_load || is_store) begin
             result = a + b;
         end
         else if (!width_32) begin

@@ -33,6 +33,11 @@ typedef struct packed {
     Jump_Code jump_if;   // under what conditions do we jump? (always, ALU 1, etc
     logic jump_absolute; // JAL/Branches are PC-relative (jumpt to imm+PC), JALR is absolute (jump to ALU-result)
 
+	logic is_jump;
+	logic is_branch;
+
+	logic add_operation;
+
     // == Mem stage?
     logic is_store;
 	logic is_load;
@@ -106,6 +111,11 @@ module Decoder
         out.jump_if = JUMP_NO;
         out.jump_absolute = 0; // JAL and Branches are PC-relative, JALR is absolute
 
+		out.is_jump = 0;
+		out.is_branch = 0;
+
+		out.add_operation = 0;
+
         out.is_ecall = 0;
 		out.is_load = 0;
 		out.is_store = 0;
@@ -118,9 +128,8 @@ module Decoder
             OP_LUI, OP_AUIPC: begin
                 out.immed = immed_U;
                 out.alu_use_immed = 1; 
-                out.rs1 = 0; //don't add anything to immed
-                out.funct7 = 0;
-                out.funct3 = F3OP_ADD_SUB; //ALU does 0+immed
+				
+				out.add_operation = 1;
 
                 {out.en_rs1, out.en_rs2, out.en_rd } = 3'b001; // imm -> dest reg
 
@@ -133,27 +142,26 @@ module Decoder
             OP_JALR: begin
                 out.immed = immed_I;
                 out.alu_use_immed = 1; //rs1 + immed
-                out.funct7 = 0;
-                out.funct3 = F3OP_ADD_SUB; //ALU does rs1+immed
 
                 {out.en_rs1, out.en_rs2, out.en_rd } = 3'b101; // src reg + return addr
 
                 // == Set signals to jump unconditionally to ALU result (rs1 + imm)
                 out.jump_if = JUMP_YES;
                 out.jump_absolute = 1; //Use ALU Result
+
+				out.is_jump = 1;
             end
             OP_JAL: begin
                 out.immed = immed_UJ;
-                out.rs1 = 0; 
                 out.alu_use_immed = 1;
-                out.funct7 = 0;
-                out.funct3 = F3OP_ADD_SUB; //ALU does 0+immed
 
                 {out.en_rs1, out.en_rs2, out.en_rd } = 3'b001; // only return addr
 
                 // == Set signals to jump unconditionally, pc-relative
                 out.jump_if = JUMP_YES;
                 out.jump_absolute = 0; // jumps to PC+imm
+
+				out.is_jump = 1;
             end
 
             // == Branches
@@ -161,8 +169,9 @@ module Decoder
             // Set condition and ALU op based on which branch it is
             OP_BRANCH: begin
                 out.immed = immed_SB;
-                out.funct7 = 7'b000_0000;  //zero this unless we're doing something weird
                 {out.en_rs1, out.en_rs2, out.en_rd } = 3'b110; // test regs
+
+				out.is_branch = 1;
 
                 // == Set when to jump
                 out.jump_absolute = 0; // always jumps to PC+imm
@@ -178,6 +187,7 @@ module Decoder
                 
                 // == Set which OP Alu should do
                 // ALU does rs1 comp rs2
+				/*
                 case (funct3) inside
                     F3B_BEQ, F3B_BNE: begin
                         out.funct7 = 7'b010_0000; 
@@ -188,6 +198,7 @@ module Decoder
 
                     default: $error("ERROR: INVALID FUNCT3 '%b' FOR BRANCH OP", out.funct3);
                 endcase
+				*/
             end //end branch
 
             // === Load/Store
@@ -220,7 +231,6 @@ module Decoder
             OP_OP_IMM, OP_IMM_32: begin
                 out.immed = immed_I;
                 out.alu_use_immed = 1;
-                out.funct7 = 0;
                 {out.en_rs1, out.en_rs2, out.en_rd } = 3'b101; //no rs2
                 // ALU codes come from op
                 if (op_code == OP_IMM_32) begin
@@ -242,13 +252,11 @@ module Decoder
 
             OP_MISC_MEM: begin
                 out.immed = 0; // Might need to change this
-                out.funct7 = 0;
                 {out.en_rs1, out.en_rs2, out.en_rd } = 3'b000; // I think this is right?
             end
 
             OP_SYSTEM: begin
                 out.immed = 0;
-                out.funct7 = 0;
                 { out.en_rs1, out.en_rs2, out.en_rd } = 3'b000;
                 
                 case (funct3) inside
@@ -271,7 +279,9 @@ module Decoder
 					end
                 endcase
             end
-            // Technically, we want a default case to avoid inferred latches
+			default: begin
+				$display("Decoder found unsupported instruction.");
+			end
         endcase
     end
 
