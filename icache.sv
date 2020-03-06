@@ -56,7 +56,7 @@ module Icache
 
     assign out_inst = fetch_addr[LOG_WORD_LEN-1] ? mem[index][0][offset][63:32] : mem[index][0][offset][31:0];
     assign icache_valid = tag == line_tag[index][0] && line_valid[index][0];
-    assign icache_m_axi_araddr = rplc_pc;
+    assign icache_m_axi_araddr = {rplc_pc[ADDR_WIDTH-1:LOG_WORD_LEN], {LOG_WORD_LEN{1'b0}}};
     assign icache_m_axi_arvalid = state == 3'h1;
     assign icache_m_axi_rready = state == 3'h2;
 

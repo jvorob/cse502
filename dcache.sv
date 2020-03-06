@@ -84,7 +84,7 @@ module Dcache
     assign rdata = mem[index][0][offset];
     assign dcache_valid = dcache_enable && !wrn && tag == line_tag[index][0] && line_valid[index][0];
     assign write_done = state == 3'h0 && dcache_enable && wrn && tag == line_tag[index][0] && line_valid[index][0];
-    assign dcache_m_axi_araddr = rplc_addr;
+    assign dcache_m_axi_araddr = {rplc_addr[ADDR_WIDTH-1:LOG_WORD_LEN], {LOG_WORD_LEN{1'b0}}};
     assign dcache_m_axi_awaddr = {line_tag[rplc_index][0], rplc_index, {LOG_LINE_LEN{1'b0}}, {LOG_WORD_LEN{1'b0}}};
     assign dcache_m_axi_wdata = mem[rplc_index][0][rplc_offset];
     assign dcache_m_axi_awvalid = state == 3'h1;
