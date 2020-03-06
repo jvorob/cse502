@@ -95,7 +95,6 @@ void System::console() {
 
 void System::tick(int clk) {
 
-    if (!clk) return;
 
     if (top->reset) {
         if (top->m_axi_arvalid || top->m_axi_awvalid)
@@ -105,6 +104,13 @@ void System::tick(int clk) {
         r_queue.clear();
         resp_queue.clear();
         snoop_queue.clear();
+        return;
+    }
+
+    if (!clk) {
+        if (top->m_axi_rvalid && top->m_axi_rready) r_queue.pop_front();
+        if (top->m_axi_bvalid && top->m_axi_bready) resp_queue.pop_front();
+        if (top->m_axi_acvalid && top->m_axi_acready) snoop_queue.erase(snoop_queue.begin());
         return;
     }
 
@@ -138,7 +144,6 @@ void System::tick(int clk) {
         top->m_axi_rdata = r_queue.begin()->first;
         top->m_axi_rid = r_queue.begin()->second.first;
         top->m_axi_rlast = r_queue.begin()->second.second;
-        if (top->m_axi_rready) r_queue.pop_front();
     }
 
     if (top->m_axi_awvalid) {
@@ -176,7 +181,6 @@ void System::tick(int clk) {
     if (!resp_queue.empty()) {
         top->m_axi_bvalid = 1;
         top->m_axi_bid = *resp_queue.begin();
-        if (top->m_axi_bready) resp_queue.pop_front();
     }
 
     top->m_axi_acvalid = 0;
@@ -184,7 +188,6 @@ void System::tick(int clk) {
         top->m_axi_acvalid = 1;
         top->m_axi_acaddr = *snoop_queue.begin();
         top->m_axi_acsnoop = 0xD; // MakeInvalid
-        if (top->m_axi_acready) snoop_queue.erase(snoop_queue.begin());
     }
 }
 
