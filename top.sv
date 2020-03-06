@@ -512,7 +512,7 @@ module top
                 counter <= 0;
 				// Must refetch flushed instructions.
 				// Currently, only ecall will make use of this.
-				sm_pc <= MEM_reg.curr_pc;
+				sm_pc <= WB_reg.curr_pc + 4;
             end
 			else if (flush_before_ex) begin
 				counter <= 0;
@@ -522,7 +522,7 @@ module top
 					sm_pc <= jump_target_address;
 				end
 				else begin
-					sm_pc <= ID_reg.curr_pc;
+					sm_pc <= EX_reg.curr_pc + 4; // TODO: uh this is wrong, we should only flush if we did the jump
 				end
 			end
             else if (ir == 0 && counter < 5) begin // === Run until we hit a 0x0000_0000 instruction (wait a few more cycles for pipeline to finish)
