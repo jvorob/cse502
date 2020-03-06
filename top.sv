@@ -249,6 +249,7 @@ module top
     // mask off bottommost bit of jump target: (according to RISCV spec)
     assign jump_target_address = (EX_deco.jump_absolute ? alu_out : (EX_reg.curr_pc + EX_deco.immed)) & ~64'b1;
 
+    //Deciding whether to jump
     always_comb begin
         case (EX_deco.jump_if) inside
 			JUMP_NO:		do_jump = 0;
@@ -267,7 +268,19 @@ module top
 
 
     logic [63:0] exec_result;
-    assign exec_result = EX_deco.keep_pc_plus_immed ? EX_reg.curr_pc + EX_deco.immed : alu_out;
+
+    //Deciding EXEC_stage output
+    always_comb begin
+        if (do_jump) begin // Jumps store return addr (pc+4)
+            exec_result = EX_reg.curr_pc + 4 ; //(For JAL/JALR. Branches will discard it anyway)
+
+        end else if (EX_deco.keep_pc_plus_immed) begin //FOR AUIPC
+            exec_result = EX_reg.curr_pc + EX_deco.immed;
+
+        end else begin //All others
+            exec_result = alu_out;
+        end
+    end
 
 
     //== Some dummy signals for debugging (since gtkwave can't show packed structs
