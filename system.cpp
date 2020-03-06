@@ -115,24 +115,19 @@ void System::tick(int clk) {
         if (top->m_axi_arburst != 2) {
             cerr << "Read request with non-wrap burst (" << std::dec << top->m_axi_arburst << ") unsupported" << endl;
             Verilated::gotFinish(true);
-
         } else if (top->m_axi_arlen+1 != 8) {
-            cerr << "Read request with length != 8 (" << std::dec << top->m_axi_arlen << "+1)" << endl;
-            Verilated::gotFinish(true);
-
+              cerr << "Read request with length != 8 (" << std::dec << top->m_axi_arlen << "+1)" << endl;
+              Verilated::gotFinish(true);
         } else if (xfer_addr > (ramsize - 64)) {
             cerr << "Invalid 64-byte access, address " << std::hex << xfer_addr << " is beyond end of memory at " << ramsize << endl;
             Verilated::gotFinish(true);
-
         } else if (addr_to_tag.find(xfer_addr)!=addr_to_tag.end()) {
             cerr << "Access for " << std::hex << xfer_addr << " already outstanding.  Ignoring..." << endl;
-
         } else {
             assert(willAcceptTransaction(xfer_addr)); // if this gets triggered, need to rethink AXI "ready" signal strategy
             assert(
                     dramsim->addTransaction(false, xfer_addr)
                   );
-
             addr_to_tag[xfer_addr] = make_pair(top->m_axi_araddr, top->m_axi_arid);
         }
     }
