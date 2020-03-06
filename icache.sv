@@ -9,8 +9,8 @@ module Icache
     input reset,
     
     // Pipeline interface
-    input  [63:0]   sm_pc,
-    output [31:0]   ir,
+    input  [63:0]   fetch_addr,
+    output [31:0]   out_inst,
     output          icache_valid,
 
     // AXI interface
@@ -50,11 +50,11 @@ module Icache
     wire [LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN] rplc_index = rplc_pc[LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN];
     wire [ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN] rplc_tag = rplc_pc[ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN];
 
-    wire [LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_WORD_LEN] offset = sm_pc[LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_WORD_LEN];
-    wire [LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN] index = sm_pc[LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN];
-    wire [ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN] tag = sm_pc[ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN];
+    wire [LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_WORD_LEN] offset = fetch_addr[LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_WORD_LEN];
+    wire [LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN] index = fetch_addr[LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN];
+    wire [ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN] tag = fetch_addr[ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN];
 
-    assign ir = sm_pc[LOG_WORD_LEN-1] ? mem[index][0][offset][63:32] : mem[index][0][offset][31:0];
+    assign out_inst = fetch_addr[LOG_WORD_LEN-1] ? mem[index][0][offset][63:32] : mem[index][0][offset][31:0];
     assign icache_valid = tag == line_tag[index][0] && line_valid[index][0];
     assign icache_m_axi_araddr = rplc_pc;
     assign icache_m_axi_arvalid = state == 3'h1;
@@ -77,7 +77,7 @@ module Icache
             case(state)
             3'h0: begin  // idle
                 // It's addressed by bytes, even though you don't get full granularity at byte level
-                rplc_pc <= sm_pc;
+                rplc_pc <= fetch_addr;
                 if(!icache_valid)
                     state <= 3'h1;
             end

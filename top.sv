@@ -69,21 +69,10 @@ module top
 
 	// This is used to let the instructions in the middle of the pipeline finish
 	// executing before we stop. This is because there might still be instructions in the
-	// pipeline partially executed after hitting the end of the program with sm_pc.
+	// pipeline partially executed after hitting the end of the program with IF_pc.
     logic [2:0] counter;
     
-    logic [63:0] sm_pc; //PC of axi-fetching state machine
-    logic [31:0] ir;
-    logic icache_valid;
 
-    // Curr instruction and PC going to decoder
-    logic [63:0] pc = sm_pc;
-    logic [31:0] cur_inst = ir;
-
-    logic enable_execute; //set by state machine, is high for one clock for each instr
-    // until we have instruction cache, many clock cycles spent on AXI-fetch
-    // need to disable continuously execute current instr while waiting 
-    
     // Traffic controller signals:
     // gen_bubble
     logic gen_if_bubble;
@@ -103,6 +92,15 @@ module top
 	logic flush_before_ex;	// Used for jumps/branches
 
     // ------------------------BEGIN IF STAGE--------------------------
+    
+
+
+    logic [63:0] IF_pc;
+    logic [31:0] IF_inst;
+    logic IF_inst_valid;
+
+
+    // === ICACHE stuff
  
     wire [ID_WIDTH-1:0]     icache_m_axi_arid;
     wire [ADDR_WIDTH-1:0]   icache_m_axi_araddr;
@@ -121,7 +119,12 @@ module top
     wire                    icache_m_axi_rvalid;
     wire                    icache_m_axi_rready;
 
-    Icache icache (.*);
+    Icache icache (
+            .icache_valid(IF_inst_valid),
+            .fetch_addr(IF_pc),
+            .out_inst(IF_inst),
+            .*
+    );
 
     // ------------------------END IF STAGE----------------------------
 
@@ -131,12 +134,12 @@ module top
 
         //traffic signals
         .wr_en(id_wr_en),
-        .gen_bubble(!icache_valid || gen_if_bubble), // if no instruction, pipeline gets bubble (TODO TEMP)
+        .gen_bubble(!IF_inst_valid || gen_if_bubble), // if no instruction, pipeline gets bubble (TODO TEMP)
         .bubble(),
 
         // incoming signals for next step's ID
-        .next_pc(pc),
-        .next_inst(cur_inst),
+        .next_pc(IF_pc),
+        .next_inst(IF_inst),
 
         // outgoing signals for current ID stage
         .curr_pc(),
@@ -145,7 +148,7 @@ module top
 
     // ------------------------BEGIN ID STAGE--------------------------
 
-    // Components decoded from cur_inst, set by decoder
+    // Components decoded from IF_inst, set by decoder
     decoded_inst_t ID_deco; 
 
     Decoder d(
@@ -486,51 +489,48 @@ module top
         .wb_wr_en(wb_wr_en)
     );
 
-
-    assign enable_execute = icache_valid;
-
     AXI_interconnect axi_interconnect (.*);
 
     always_ff @ (posedge clk) begin
-        if (sm_pc[1:0] != 2'b00) 
-            $error("ERROR: executing unaligned instruction at PC=%x", sm_pc);
+        if (IF_pc[1:0] != 2'b00) 
+            $error("ERROR: executing unaligned instruction at IF_pc=%x", IF_pc);
     end
 
 	// This is used to let the instructions in the middle of the pipeline finish
 	// executing before we stop. This is because there might still be instructions in the
-	// pipeline partially executed after hitting the end of the program with sm_pc.
+	// pipeline partially executed after hitting the end of the program with IF_pc.
     // logic [2:0] counter;
 
     always_ff @ (posedge clk) begin
         if (reset) begin
             $display("Entry: %x", entry);
-            sm_pc <= entry;
+            IF_pc <= entry;
             counter <= 0;
         end
-        else if (icache_valid) begin
+        else if (IF_inst_valid) begin
             if (flush_before_wb) begin
                 counter <= 0;
 				// Must refetch flushed instructions.
 				// Currently, only ecall will make use of this.
-				sm_pc <= WB_reg.curr_pc + 4;
+				IF_pc <= WB_reg.curr_pc + 4;
             end
 			else if (flush_before_ex) begin
 				counter <= 0;
 				// Must refetch flushed instructions.
 				// Currently, only branches/jumps will make use of this.
 				if (do_jump) begin
-					sm_pc <= jump_target_address;
+					IF_pc <= jump_target_address;
 				end
 				else begin
-					sm_pc <= EX_reg.curr_pc + 4; // TODO: uh this is wrong, we should only flush if we did the jump
+					IF_pc <= EX_reg.curr_pc + 4; // TODO: uh this is wrong, we should only flush if we did the jump
 				end
 			end
-            else if (ir == 0 && counter < 5) begin // === Run until we hit a 0x0000_0000 instruction (wait a few more cycles for pipeline to finish)
+            else if (IF_inst == 0 && counter < 5) begin // === Run until we hit a 0x0000_0000 instruction (wait a few more cycles for pipeline to finish)
                 counter <= counter + 1;
             end
             else if (counter == 5) begin
                 $display("===== Program terminated =====");
-                $display("    PC = 0x%0x", pc);
+                $display("    IF_pc = 0x%0x", IF_pc);
                     for(int i = 0; i < 32; i++)
                     $display("    r%2.2d: %10d (0x%x)", i, rf.regs[i], rf.regs[i]);
                 $finish;
@@ -538,10 +538,10 @@ module top
             else begin
 				counter <= 0;
                 if (!id_wr_en) begin
-                    sm_pc <= sm_pc;
+                    IF_pc <= IF_pc;
                 end
                 else begin
-                    sm_pc <= sm_pc + 64'h4;
+                    IF_pc <= IF_pc + 64'h4;
                 end
             end
         end
