@@ -272,6 +272,8 @@ module top
 
     logic [63:0] exec_result;
 
+    logic ex_keep_pc_plus_immed = EX_deco.keep_pc_plus_immed;
+
     //Deciding EXEC_stage output
     always_comb begin
         if (do_jump) begin // Jumps store return addr (pc+4)
@@ -507,25 +509,25 @@ module top
             IF_pc <= entry;
             counter <= 0;
         end
-        else if (IF_inst_valid) begin
-            if (flush_before_wb) begin
-                counter <= 0;
-				// Must refetch flushed instructions.
-				// Currently, only ecall will make use of this.
-				IF_pc <= WB_reg.curr_pc + 4;
-            end
-			else if (flush_before_ex) begin
-				counter <= 0;
-				// Must refetch flushed instructions.
-				// Currently, only branches/jumps will make use of this.
-				if (do_jump) begin
-					IF_pc <= jump_target_address;
-				end
-				else begin
-					IF_pc <= EX_reg.curr_pc + 4; // TODO: uh this is wrong, we should only flush if we did the jump
-				end
+        else if (flush_before_wb && !WB_reg.bubble) begin
+            counter <= 0;
+			// Must refetch flushed instructions.
+			// Currently, only ecall will make use of this.
+			IF_pc <= WB_reg.curr_pc + 4;
+        end
+		else if (flush_before_ex && !EX_reg.bubble) begin
+			counter <= 0;
+			// Must refetch flushed instructions.
+			// Currently, only branches/jumps will make use of this.
+			if (do_jump) begin
+				IF_pc <= jump_target_address;
 			end
-            else if (IF_inst == 0 && counter < 5) begin // === Run until we hit a 0x0000_0000 instruction (wait a few more cycles for pipeline to finish)
+			else begin
+				IF_pc <= EX_reg.curr_pc + 4; // TODO: uh this is wrong, we should only flush if we did the jump
+			end
+		end
+        else if (IF_inst_valid) begin
+            if (IF_inst == 0 && counter < 5) begin // === Run until we hit a 0x0000_0000 instruction (wait a few more cycles for pipeline to finish)
                 counter <= counter + 1;
             end
             else if (counter == 5) begin

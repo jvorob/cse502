@@ -62,6 +62,10 @@ module mem_stage
 
     assign dcache_en = (inst.is_load || inst.is_store) && !is_bubble;
 
+    logic [5:0] shift_amt;
+    assign shift_amt = {ex_data[2:0], 3'b000};
+    logic [63:0] mem_rdata_shifted;
+
     always_comb begin
         // This case only matters for stores
         case (inst.funct3)
@@ -72,16 +76,18 @@ module mem_stage
             default: mem_wr_data = ex_data2[63:0];
         endcase
 
+        mem_rdata_shifted = mem_rdata >> shift_amt;
+        
         // This only matters for loads
         case (inst.funct3)
             // load signed
-            F3LS_B: mem_ex_rdata = { {56{mem_rdata[7]}}, mem_rdata[7:0] };
-            F3LS_H: mem_ex_rdata = { {48{mem_rdata[15]}}, mem_rdata[15:0] };
-            F3LS_W: mem_ex_rdata = { {32{mem_rdata[31]}}, mem_rdata[31:0] };
+            F3LS_B: mem_ex_rdata = { {56{mem_rdata_shifted[7]}}, mem_rdata_shifted[7:0] };
+            F3LS_H: mem_ex_rdata = { {48{mem_rdata_shifted[15]}}, mem_rdata_shifted[15:0] };
+            F3LS_W: mem_ex_rdata = { {32{mem_rdata_shifted[31]}}, mem_rdata_shifted[31:0] };
             // load unsigned
-            F3LS_BU: mem_ex_rdata = { 56'd0, mem_rdata[7:0] };
-            F3LS_HU: mem_ex_rdata = { 48'd0, mem_rdata[15:0] };
-            F3LS_WU: mem_ex_rdata = { 32'd0, mem_rdata[31:0] };
+            F3LS_BU: mem_ex_rdata = { 56'd0, mem_rdata_shifted[7:0] };
+            F3LS_HU: mem_ex_rdata = { 48'd0, mem_rdata_shifted[15:0] };
+            F3LS_WU: mem_ex_rdata = { 32'd0, mem_rdata_shifted[31:0] };
             default: mem_ex_rdata = mem_rdata;
         endcase
     end
