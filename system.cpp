@@ -68,7 +68,7 @@ System::System(Vtop* top, unsigned ramsize, const char* ramelf, const int argc, 
     dramsim = DRAMSim::getMemorySystemInstance("DDR2_micron_16M_8b_x8_sg3E.ini", "system.ini", "../dramsim2", "dram_result", ramsize / MEGA);
     DRAMSim::TransactionCompleteCB *read_cb = new DRAMSim::Callback<System, void, unsigned, uint64_t, uint64_t>(this, &System::dram_read_complete);
     DRAMSim::TransactionCompleteCB *write_cb = new DRAMSim::Callback<System, void, unsigned, uint64_t, uint64_t>(this, &System::dram_write_complete);
-    dramsim->RegisterCallbacks(read_cb, NULL, NULL);
+    dramsim->RegisterCallbacks(read_cb, write_cb, NULL);
     dramsim->setCPUClockSpeed(1000ULL*1000*1000*1000/ps_per_clock);
 }
 
@@ -161,6 +161,7 @@ void System::tick(int clk) {
         } else if (addr_to_tag.find(w_addr)!=addr_to_tag.end()) {
             cerr << "Access for " << std::hex << w_addr << " already outstanding.  Ignoring..." << endl;
         } else {
+            //printf("write transaction is triggered\n");
             assert(willAcceptTransaction(w_addr)); // if this gets triggered, need to rethink AXI "ready" signal strategy
             assert(
                     dramsim->addTransaction(true, w_addr)
@@ -173,8 +174,9 @@ void System::tick(int clk) {
     if (top->m_axi_wvalid && w_count) {
         // if transfer is in progress, can't change mind about willAcceptTransaction()
         assert(willAcceptTransaction(w_addr));
+        //printf("write-back in offset: %d, data: %x\n", 8-w_count, top->m_axi_wdata);
         *((uint64_t*)(&ram[w_addr + (8-w_count)*8])) = top->m_axi_wdata;
-        --w_count;
+        if(--w_count == 0) assert(top->m_axi_wlast);
     }
 
     top->m_axi_bvalid = 0;
@@ -192,6 +194,7 @@ void System::tick(int clk) {
 }
 
 void System::dram_read_complete(unsigned id, uint64_t address, uint64_t clock_cycle) {
+    //printf("dram read complete for addr: %x\n", address);
     map<uint64_t, pair<uint64_t, int> >::iterator tag = addr_to_tag.find(address);
     assert(tag != addr_to_tag.end());
     uint64_t orig_addr = tag->second.first;
@@ -201,6 +204,7 @@ void System::dram_read_complete(unsigned id, uint64_t address, uint64_t clock_cy
 }
 
 void System::dram_write_complete(unsigned id, uint64_t address, uint64_t clock_cycle) {
+    //printf("dram write complete for addr: %x\n", address);
     do_finish_write(address, 64);
     map<uint64_t, pair<uint64_t, int> >::iterator tag = addr_to_tag.find(address);
     assert(tag != addr_to_tag.end());

@@ -124,10 +124,10 @@ module Dcache
                     if(tag == line_tag[index][0] && line_valid[index][0]) begin // hit
                         if(wrn) begin // write
                             case(wlen)
-                            3'h0: mem[index][0][offset][8*addr[LOG_WORD_LEN-1:0]+:8] <= wdata;
-                            3'h1: mem[index][0][offset][16*addr[LOG_WORD_LEN-1:1]+:16] <= wdata;
-                            3'h2: mem[index][0][offset][32*addr[LOG_WORD_LEN-1]+:32] <= wdata;
-                            3'h3: mem[index][0][offset] <= wdata;
+                            2'h0: mem[index][0][offset][8*addr[LOG_WORD_LEN-1:0]+:8] <= wdata;
+                            2'h1: mem[index][0][offset][16*addr[LOG_WORD_LEN-1:1]+:16] <= wdata;
+                            2'h2: mem[index][0][offset][32*addr[LOG_WORD_LEN-1]+:32] <= wdata;
+                            2'h3: mem[index][0][offset] <= wdata;
                             endcase
                             line_dirty[index][0] <= 1'b1;
                         end
@@ -138,12 +138,14 @@ module Dcache
                 end
             end
             3'h1: begin // write back address channel
+                //$display("dcache write-back request addr: %x", dcache_m_axi_awaddr);
                 rplc_offset <= 0;
                 if(dcache_m_axi_awready)
                     state <= 3'h2;
             end
             3'h2: begin // write back data channel
                 if(dcache_m_axi_wready) begin
+                    //$display("dcache write-back offset: %x, data: %x", rplc_offset, dcache_m_axi_wdata);
                     rplc_offset <= rplc_offset + 1;
                     if(dcache_m_axi_wlast) begin
                         line_dirty[rplc_index][0] <= 1'b0;
@@ -152,6 +154,7 @@ module Dcache
                 end
             end
             3'h3: begin // address channel
+                //$display("dcache fetch request addr: %x", dcache_m_axi_araddr);
                 line_tag[rplc_index][0] <= rplc_tag;
                 line_valid[rplc_index][0] <= 1'b0;
                 rplc_offset <= rplc_addr[LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_WORD_LEN];

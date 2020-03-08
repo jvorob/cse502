@@ -82,6 +82,7 @@ module Icache
                     state <= 3'h1;
             end
             3'h1: begin // address channel
+               // $display("icache fetch request addr: %x", icache_m_axi_araddr);
                 line_tag[rplc_index][0] <= rplc_tag;
                 line_valid[rplc_index][0] <= 1'b0;
                 rplc_offset <= rplc_pc[LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_WORD_LEN];
