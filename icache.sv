@@ -29,7 +29,11 @@ module Icache
     input   wire [1:0]             icache_m_axi_rresp,
     input   wire                   icache_m_axi_rlast,
     input   wire                   icache_m_axi_rvalid,
-    output  wire                   icache_m_axi_rready
+    output  wire                   icache_m_axi_rready,
+    input   wire                   icache_m_axi_acvalid,
+    output  wire                   icache_m_axi_acready,
+    input   wire [ADDR_WIDTH-1:0]  icache_m_axi_acaddr,
+    input   wire [3:0]             icache_m_axi_acsnoop
 );
     localparam WORD_LEN = 8; // number of bytes in word
     localparam LOG_WORD_LEN = 3; // log(number of bytes in word)
@@ -50,13 +54,17 @@ module Icache
     wire [LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN] rplc_index = rplc_pc[LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN];
     wire [ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN] rplc_tag = rplc_pc[ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN];
 
+    wire [LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN] snoop_index = icache_m_axi_acaddr[LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN];
+    wire [ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN] snoop_tag = icache_m_axi_acaddr[ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN];
+
     wire [LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_WORD_LEN] offset = fetch_addr[LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_WORD_LEN];
     wire [LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN] index = fetch_addr[LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN];
     wire [ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN] tag = fetch_addr[ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN];
 
     assign out_inst = fetch_addr[LOG_WORD_LEN-1] ? mem[index][0][offset][63:32] : mem[index][0][offset][31:0];
-    assign icache_valid = tag == line_tag[index][0] && line_valid[index][0];
+    assign icache_valid = !icache_m_axi_acvalid && tag == line_tag[index][0] && line_valid[index][0];
     assign icache_m_axi_araddr = {rplc_pc[ADDR_WIDTH-1:LOG_WORD_LEN], {LOG_WORD_LEN{1'b0}}};
+    assign icache_m_axi_acready = state == 3'h0;
     assign icache_m_axi_arvalid = state == 3'h1;
     assign icache_m_axi_rready = state == 3'h2;
 
@@ -78,7 +86,10 @@ module Icache
             3'h0: begin  // idle
                 // It's addressed by bytes, even though you don't get full granularity at byte level
                 rplc_pc <= fetch_addr;
-                if(!icache_valid)
+                if(icache_m_axi_acvalid && (icache_m_axi_acsnoop == 4'hd)) begin // snoop invalidation
+                    if(line_tag[snoop_index][0] == snoop_tag)
+                        line_valid[snoop_index][0] <= 1'b0;
+                end else if(!icache_valid)
                     state <= 3'h1;
             end
             3'h1: begin // address channel

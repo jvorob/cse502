@@ -55,7 +55,11 @@ module mem_stage
     input   wire [1:0]              dcache_m_axi_rresp,
     input   wire                    dcache_m_axi_rlast,
     input   wire                    dcache_m_axi_rvalid,
-    output  wire                    dcache_m_axi_rready
+    output  wire                    dcache_m_axi_rready,
+    input   wire                    dcache_m_axi_acvalid,
+    output  wire                    dcache_m_axi_acready,
+    input   wire [ADDR_WIDTH-1:0]   dcache_m_axi_acaddr,
+    input   wire [3:0]              dcache_m_axi_acsnoop
 );
     logic [63:0] mem_rdata;
     logic [63:0] mem_wr_data; // Write data

@@ -118,6 +118,10 @@ module top
     wire                    icache_m_axi_rlast;
     wire                    icache_m_axi_rvalid;
     wire                    icache_m_axi_rready;
+    wire                    icache_m_axi_acvalid;
+    wire                    icache_m_axi_acready;
+    wire [ADDR_WIDTH-1:0]   icache_m_axi_acaddr;
+    wire [3:0]              icache_m_axi_acsnoop;
 
     Icache icache (
             .icache_valid(IF_inst_valid),
@@ -356,6 +360,10 @@ module top
     wire                    dcache_m_axi_rlast;
     wire                    dcache_m_axi_rvalid;
     wire                    dcache_m_axi_rready;
+    wire                    dcache_m_axi_acvalid;
+    wire                    dcache_m_axi_acready;
+    wire [ADDR_WIDTH-1:0]   dcache_m_axi_acaddr;
+    wire [3:0]              dcache_m_axi_acsnoop;
 
     logic [63:0] mem_ex_rdata;   // Properly extended rdata
     logic dcache_en;

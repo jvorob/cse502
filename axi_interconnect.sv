@@ -42,6 +42,10 @@ module AXI_interconnect
     input   wire                    m_axi_rlast,
     input   wire                    m_axi_rvalid,
     output  wire                    m_axi_rready,
+    input   wire                    m_axi_acvalid,
+    output  wire                    m_axi_acready,
+    input   wire [ADDR_WIDTH-1:0]   m_axi_acaddr,
+    input   wire [3:0]              m_axi_acsnoop,
 
     // icache interface
     input   wire [ID_WIDTH-1:0]     icache_m_axi_arid,
@@ -60,6 +64,10 @@ module AXI_interconnect
     output  wire                    icache_m_axi_rlast,
     output  wire                    icache_m_axi_rvalid,
     input   wire                    icache_m_axi_rready,
+    output  wire                    icache_m_axi_acvalid,
+    input   wire                    icache_m_axi_acready,
+    output  wire [ADDR_WIDTH-1:0]   icache_m_axi_acaddr,
+    output  wire [3:0]              icache_m_axi_acsnoop,
 
     // dcache interface
     input   wire [ID_WIDTH-1:0]     dcache_m_axi_awid,
@@ -96,7 +104,11 @@ module AXI_interconnect
     output  wire [1:0]              dcache_m_axi_rresp,
     output  wire                    dcache_m_axi_rlast,
     output  wire                    dcache_m_axi_rvalid,
-    input   wire                    dcache_m_axi_rready
+    input   wire                    dcache_m_axi_rready,
+    output  wire                    dcache_m_axi_acvalid,
+    input   wire                    dcache_m_axi_acready,
+    output  wire [ADDR_WIDTH-1:0]   dcache_m_axi_acaddr,
+    output  wire [3:0]              dcache_m_axi_acsnoop
 );
 
     // adress write channel
@@ -149,5 +161,14 @@ module AXI_interconnect
     assign icache_m_axi_rvalid = m_axi_rid[0] ? 1'b0 : m_axi_rvalid;
     assign dcache_m_axi_rvalid = m_axi_rid[0] ? m_axi_rvalid : 1'b0;
     assign m_axi_rready = m_axi_rid[0] ? dcache_m_axi_rready : icache_m_axi_rready;
+
+    // snoop channel
+    assign icache_m_axi_acaddr = m_axi_acaddr;
+    assign dcache_m_axi_acaddr = m_axi_acaddr;
+    assign icache_m_axi_acsnoop = m_axi_acsnoop;
+    assign dcache_m_axi_acsnoop = m_axi_acsnoop;
+    assign icache_m_axi_acvalid = m_axi_acvalid;
+    assign dcache_m_axi_acvalid = m_axi_acvalid;
+    assign m_axi_acready = icache_m_axi_acready & dcache_m_axi_acready;
 
 endmodule

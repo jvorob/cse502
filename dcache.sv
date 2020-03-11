@@ -54,7 +54,11 @@ module Dcache
     input   wire [1:0]              dcache_m_axi_rresp,
     input   wire                    dcache_m_axi_rlast,
     input   wire                    dcache_m_axi_rvalid,
-    output  wire                    dcache_m_axi_rready
+    output  wire                    dcache_m_axi_rready,
+    input   wire                    dcache_m_axi_acvalid,
+    output  wire                    dcache_m_axi_acready,
+    input   wire [ADDR_WIDTH-1:0]   dcache_m_axi_acaddr,
+    input   wire [3:0]              dcache_m_axi_acsnoop
 );
 
     localparam WORD_LEN = 8; // number of bytes in word
@@ -77,16 +81,20 @@ module Dcache
     wire [LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN] rplc_index = rplc_addr[LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN];
     wire [ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN] rplc_tag = rplc_addr[ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN];
 
+    wire [LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN] snoop_index = dcache_m_axi_acaddr[LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN];
+    wire [ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN] snoop_tag = dcache_m_axi_acaddr[ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN];
+
     wire [LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_WORD_LEN] offset = addr[LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_WORD_LEN];
     wire [LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN] index = addr[LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN];
     wire [ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN] tag = addr[ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN];
 
     assign rdata = mem[index][0][offset];
-    assign dcache_valid = dcache_enable && !wrn && tag == line_tag[index][0] && line_valid[index][0];
-    assign write_done = state == 3'h0 && dcache_enable && wrn && tag == line_tag[index][0] && line_valid[index][0];
+    assign dcache_valid = !dcache_m_axi_acvalid && dcache_enable && !wrn && tag == line_tag[index][0] && line_valid[index][0];
+    assign write_done = state == 3'h0 && !dcache_m_axi_acvalid && dcache_enable && wrn && tag == line_tag[index][0] && line_valid[index][0];
     assign dcache_m_axi_araddr = {rplc_addr[ADDR_WIDTH-1:LOG_WORD_LEN], {LOG_WORD_LEN{1'b0}}};
     assign dcache_m_axi_awaddr = {line_tag[rplc_index][0], rplc_index, {LOG_LINE_LEN{1'b0}}, {LOG_WORD_LEN{1'b0}}};
     assign dcache_m_axi_wdata = mem[rplc_index][0][rplc_offset];
+    assign dcache_m_axi_acready = state == 3'h0;
     assign dcache_m_axi_awvalid = state == 3'h1;
     assign dcache_m_axi_wvalid = state == 3'h2;
     assign dcache_m_axi_arvalid = state == 3'h3;
@@ -119,7 +127,12 @@ module Dcache
         end else begin
             case(state)
             3'h0: begin // idle
-                if(dcache_enable) begin
+                if(dcache_m_axi_acvalid && (dcache_m_axi_acsnoop == 4'hd)) begin // snoop invalidation
+                    if(line_tag[snoop_index][0] == snoop_tag) begin
+                        line_valid[snoop_index][0] <= 1'b0;
+                        line_dirty[snoop_index][0] <= 1'b0;
+                    end
+                end else if(dcache_enable) begin
                     rplc_addr <= addr;
                     if(tag == line_tag[index][0] && line_valid[index][0]) begin // hit
                         if(wrn) begin // write
