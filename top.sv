@@ -70,7 +70,7 @@ module top
 	// This is used to let the instructions in the middle of the pipeline finish
 	// executing before we stop. This is because there might still be instructions in the
 	// pipeline partially executed after hitting the end of the program with IF_pc.
-    logic [2:0] counter;
+    logic [2:0] termination_counter;
     
 
     // Traffic controller signals:
@@ -97,8 +97,48 @@ module top
 
     logic [63:0] IF_pc;
     logic [31:0] IF_inst;
-    logic IF_inst_valid;
+    logic IF_inst_valid; //if cache output is valid
 
+    // Note: we have if_wr_en to update IF_pc, but that doesn't mean we're
+    // executing the instruction currently in IF. That only happens when the
+    // instruction currently in IF goes into the pipeline, which happens
+    // when ID reg is taking in a fresh instruction
+    logic IF_is_executing;
+    assign IF_is_executing = (id_wr_en) && !(gen_if_bubble); //TODO: gen_if means ID will be getting the bubble
+
+
+    // IF-stage PC logic
+    always_ff @ (posedge clk) begin
+        if (reset) begin
+            $display("Entry: %x", entry);
+            IF_pc <= entry;
+        end 
+        
+        else if (if_wr_en) begin
+            // (ECALL: re-execute flushed instructions
+            if (flush_before_wb) begin 
+                if(WB_reg.bubble) $error("ERROR: flush_before_wb expects ECALL inst in WB, found bubble");
+
+                // start after ECALL which is in WB (TODO: will be in WB?)
+                IF_pc <= WB_reg.curr_pc + 4;
+            end
+
+            // (JUMP: change pc to jump_target)
+            else if (flush_before_ex) begin 
+                if(EX_reg.bubble) $error("ERROR: flush_before_ex expects inst in EX, found bubble");
+
+                if (do_jump) 
+                    IF_pc <= jump_target_address;
+                else 
+                    $error("ERROR: We should only flush_before_ex if do_jump is high"); 
+            end
+
+            // Default PC logic: advance:  
+            else begin
+                IF_pc <= IF_pc+4;
+            end
+        end
+    end
 
     // === ICACHE stuff
  
@@ -138,7 +178,7 @@ module top
 
         //traffic signals
         .wr_en(id_wr_en),
-        .gen_bubble(!IF_inst_valid || gen_if_bubble), // if no instruction, pipeline gets bubble (TODO TEMP)
+        .gen_bubble(gen_if_bubble), // ID gets bubble if IF stalled (since IF can't have a bubble itself)
         .bubble(),
 
         // incoming signals for next step's ID
@@ -173,7 +213,9 @@ module top
 	logic [63:0] WB_result;
 	logic [4:0] WB_rd;
 	logic WB_en_rd;
-    assign writeback_en = WB_en_rd && !WB_reg.bubble && !gen_wb_bubble;  // dont write bubbles
+    assign writeback_en = !WB_reg.bubble && !haz_wb_stall && WB_en_rd; 
+    // only wb on a valid instruction, not stalled (i.e. completed)
+    // and which actually has something to writeback (en_rd)
 
     RegFile rf(
         .clk(clk),
@@ -265,7 +307,7 @@ module top
 			JUMP_ALU_NEZ:	do_jump = (alu_out != 0);
         endcase
 		
-        if (counter != 1) begin
+        if (termination_counter != 1) begin
     		flush_before_ex = do_jump;
         end
         else begin
@@ -477,6 +519,7 @@ module top
 
     traffic_control traffic(
         // Inputs (stalls from hazard unit)
+        .if_stall(!IF_inst_valid), //IF doesn't get data dependencies, stalls on Icache
         .id_stall(haz_id_stall),
         .ex_stall(haz_ex_stall),
         .mem_stall(haz_mem_stall),
@@ -493,6 +536,7 @@ module top
 		.wb_bubble(gen_wb_bubble),
 
         // Output wr_en
+        .if_wr_en(if_wr_en),
         .id_wr_en(id_wr_en),
         .ex_wr_en(ex_wr_en),
         .mem_wr_en(mem_wr_en),
@@ -501,64 +545,40 @@ module top
 
     AXI_interconnect axi_interconnect (.*);
 
-    always_ff @ (posedge clk) begin
+    always_ff @ (posedge clk) begin //Assert isntructions aligned
         if (IF_pc[1:0] != 2'b00) 
             $error("ERROR: executing unaligned instruction at IF_pc=%x", IF_pc);
     end
 
-	// This is used to let the instructions in the middle of the pipeline finish
-	// executing before we stop. This is because there might still be instructions in the
-	// pipeline partially executed after hitting the end of the program with IF_pc.
-    // logic [2:0] counter;
+   
 
+
+
+
+    // ==== Termination counter logic:
     always_ff @ (posedge clk) begin
-        if (reset) begin
-            $display("Entry: %x", entry);
-            IF_pc <= entry;
-            counter <= 0;
-        end
-        else if (flush_before_wb && !WB_reg.bubble) begin
-            counter <= 0;
-			// Must refetch flushed instructions.
-			// Currently, only ecall will make use of this.
-			IF_pc <= WB_reg.curr_pc + 4;
-        end
-		else if (flush_before_ex && !EX_reg.bubble) begin
-			counter <= 0;
-			// Must refetch flushed instructions.
-			// Currently, only branches/jumps will make use of this.
-			if (do_jump) begin
-				IF_pc <= jump_target_address;
-			end
-			else begin
-				IF_pc <= EX_reg.curr_pc + 4; // TODO: uh this is wrong, we should only flush if we did the jump
-			end
-		end
-        else if (IF_inst_valid) begin
-            if (IF_inst == 0 && counter < 5) begin // === Run until we hit a 0x0000_0000 instruction (wait a few more cycles for pipeline to finish)
-                counter <= counter + 1;
-            end
-            else if (counter == 5) begin
+        if (reset) 
+            termination_counter <= 0;
+        else if (IF_is_executing && IF_inst != 0) // Count resets for each real inst
+            termination_counter <= 0;
+
+        else if (IF_is_executing && IF_inst == 0) begin // Count advances for each null inst
+            termination_counter <= termination_counter + 1;
+
+            if (termination_counter == 5) begin
                 $display("===== Program terminated =====");
                 $display("    IF_pc = 0x%0x", IF_pc);
                     for(int i = 0; i < 32; i++)
                     $display("    r%2.2d: %10d (0x%x)", i, rf.regs[i], rf.regs[i]);
                 $finish;
             end
-            else begin
-				counter <= 0;
-                if (!id_wr_en) begin
-                    IF_pc <= IF_pc;
-                end
-                else begin
-                    IF_pc <= IF_pc + 64'h4;
-                end
-            end
+
         end
     end
 
-  initial begin
-        $display("Initializing top, entry point = 0x%x", entry);
-  end
+
+    initial begin
+            $display("Initializing top, entry point = 0x%x", entry);
+    end
     
 endmodule

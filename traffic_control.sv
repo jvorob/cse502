@@ -1,6 +1,6 @@
 
 module traffic_control(
-//    input if_stall,
+    input if_stall,
     input id_stall,
     input ex_stall,
     input mem_stall,
@@ -16,6 +16,7 @@ module traffic_control(
     output mem_bubble,
     output wb_bubble,
 
+    output if_wr_en,
     output id_wr_en,
     output ex_wr_en,
     output mem_wr_en,
@@ -27,11 +28,16 @@ module traffic_control(
         ex_wr_en = (mem_wr_en == 1) && (ex_stall == 0);
         id_wr_en = (ex_wr_en == 1) && (id_stall == 0);
 
+        // IF can advance either through normal pipeline
+        // or in case of a jump/pipeline-flush
+        if_wr_en = ((id_wr_en == 1) && (if_stall == 0)) ||
+                   (flush_before_wb || flush_before_ex); //in this case, IF_next_pc will also be changed
+
         wb_bubble = wb_stall;
         mem_bubble = mem_stall;
         ex_bubble = ex_stall;
         id_bubble = id_stall;
-        if_bubble = 0;
+        if_bubble = if_stall;
 
 		if (flush_before_wb) begin
             // Will turn everything into bubbles.
@@ -50,11 +56,16 @@ module traffic_control(
             id_wr_en = 1;
         end
 		else if (flush_before_ex) begin
+            // next contents of ID and EX registers, if any, will be bubbles
+            // (dump them)
 			if_bubble = 1;
             id_bubble = 1;
 
-			//ex_wr_en = 1;
-			id_wr_en = 1;
+			id_wr_en = 1;  // ID gets dumped even if stalled
+
+            // EX will be cleared, but it's currently holding the jump
+            // EX may stall, so don't wr_en until it can advance normally
+            // jump will re-execute continuously as long as it's stalled
         end
     end
 endmodule
