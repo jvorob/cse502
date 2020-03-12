@@ -147,7 +147,7 @@ void System::tick(int clk) {
     }
 
     if (top->m_axi_awvalid) {
-        uint64_t w_addr = top->m_axi_awaddr & ~0x3fULL;
+        w_addr = top->m_axi_awaddr & ~0x3fULL;
 
         if (top->m_axi_awburst != 1) {
             cerr << "Write request with non-incr burst (" << std::dec << top->m_axi_awburst << ") unsupported" << endl;
