@@ -68,5 +68,10 @@ module wb_stage
 			has_ecall_executed <= 1;
 		end
 	end
+
+
+    // dummy signals to view in waveform
+    logic is_ecall;
+    assign is_ecall = inst.is_ecall;
 endmodule
 

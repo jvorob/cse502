@@ -96,6 +96,13 @@ module mem_stage
         endcase
     end
 
+
+    // Dummy signals for waveform viewer
+    logic is_load;
+    logic is_store;
+    assign is_load = inst.is_load;
+    assign is_store = inst.is_store;
+
     Dcache dcache (
         .addr(ex_data),
         .wdata(mem_wr_data),
