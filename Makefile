@@ -1,10 +1,11 @@
 .PHONY: all run clean submit
 
-PROG=/shared/cse502/tests/wp1/prog1.o
+#PROG=/shared/cse502/tests/wp1/prog1.o
+PROG=/shared/cse502/tests/linux.bbl
 
 TRACE?=--trace
 HAVETLB=n
-FULLSYSTEM=n
+FULLSYSTEM=y
 
 VFILES=$(wildcard *.sv)
 CFILES=$(wildcard *.cpp)

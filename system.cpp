@@ -135,7 +135,7 @@ void System::tick(int clk) {
         } else if (top->m_axi_arlen+1 != 8) {
               cerr << "Read request with length != 8 (" << std::dec << top->m_axi_arlen << "+1)" << endl;
               Verilated::gotFinish(true);
-        } else if (xfer_addr > (ramsize - 64)) {
+        } else if (xfer_addr > (dram_offset + ramsize - 64)) {
             cerr << "Invalid 64-byte access, address " << std::hex << xfer_addr << " is beyond end of memory at " << ramsize << endl;
             Verilated::gotFinish(true);
         } else if (addr_to_tag.find(xfer_addr)!=addr_to_tag.end()) {
@@ -166,7 +166,7 @@ void System::tick(int clk) {
         } else if (top->m_axi_awlen+1 != 8) {
             cerr << "Write request with length != 8 (" << std::dec << top->m_axi_awlen << "+1)" << endl;
             Verilated::gotFinish(true);
-        } else if (w_addr > (ramsize - 64)) {
+        } else if (w_addr > (dram_offset + ramsize - 64)) {
             cerr << "Invalid 64-byte access, address " << std::hex << w_addr << " is beyond end of memory at " << ramsize << endl;
             Verilated::gotFinish(true);
         } else if (addr_to_tag.find(w_addr)!=addr_to_tag.end()) {
@@ -308,7 +308,7 @@ uint64_t System::load_binary(const char* filename) {
       off_t sz = lseek(fd, 0L, SEEK_END);
       assert(sz == pread(fd, &ram[0], sz, 0));
       close(fd);
-      return 0x80000000;
+      return 0x80000000ULL;
     }
 
     // check libelf version
