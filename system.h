@@ -18,6 +18,8 @@
 #define VALID_PAGE_DIR  (0b0000000011)
 #define VALID_PAGE      (0b0000000001)
 
+#define DRAM_OFFSET 0x80000000ULL
+
 typedef unsigned long __uint64_t;
 typedef __uint64_t uint64_t;
 typedef unsigned int __uint32_t;
@@ -37,7 +39,7 @@ class System {
 
     bool show_console;
 
-    uint64_t load_elf(const char* filename);
+    uint64_t load_binary(const char* filename);
 
     list<pair<uint64_t, pair<int, bool> > > r_queue;
     list<int> resp_queue;
@@ -50,7 +52,6 @@ class System {
     void dram_write_complete(unsigned id, uint64_t address, uint64_t clock_cycle);
 
     bitset<GIGA/PAGE_SIZE> phys_page_used;
-    bool use_virtual_memory;
     uint64_t get_phys_page();
     uint64_t get_pte(uint64_t base_addr, int vpn, bool isleaf, bool& allocated);
     uint64_t load_elf_parts(int fileDescriptor, size_t size, const uint64_t virt_addr);
@@ -70,16 +71,18 @@ public:
     uint64_t ticks;
     int ps_per_clock;
 
+    bool use_virtual_memory, full_system;
+
     void set_errno(const int new_errno);
     void invalidate(const uint64_t phys_addr);
     uint64_t virt_to_phy(const uint64_t virt_addr);
 
     char* ram;
-    unsigned int ramsize;
+    uint64_t ramsize, dram_offset;
     char* ram_virt;
     int ram_fd;
 
-    System(Vtop* top, unsigned ramsize, const char* ramelf, const int argc, char* argv[], int ps_per_clock);
+    System(Vtop* top, uint64_t ramsize, const char* ramelf, const int argc, char* argv[], int ps_per_clock);
     ~System();
 
     void console();

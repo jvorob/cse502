@@ -1,9 +1,10 @@
 .PHONY: all run clean submit
 
-RUNELF=/shared/cse502/tests/wp1/prog1.o
+PROG=/shared/cse502/tests/wp1/prog1.o
 
 TRACE?=--trace
 HAVETLB=n
+FULLSYSTEM=n
 
 VFILES=$(wildcard *.sv)
 CFILES=$(wildcard *.cpp)
@@ -21,7 +22,7 @@ obj_dir/Vtop.mk: $(VFILES) $(CFILES)
 	-LDFLAGS -lncurses -LDFLAGS -lelf -LDFLAGS -lrt
 
 run: obj_dir/Vtop
-	cd obj_dir/ && env HAVETLB=$(HAVETLB) ./Vtop $(RUNELF)
+	cd obj_dir/ && env HAVETLB=$(HAVETLB) FULLSYSTEM=$(FULLSYSTEM) ./Vtop $(PROG)
 
 clean:
 	rm -rf obj_dir/ dramsim2/results trace.vcd core 
