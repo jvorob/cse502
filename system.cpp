@@ -68,7 +68,7 @@ System::System(Vtop* top, unsigned ramsize, const char* ramelf, const int argc, 
     dramsim = DRAMSim::getMemorySystemInstance("DDR2_micron_16M_8b_x8_sg3E.ini", "system.ini", "../dramsim2", "dram_result", ramsize / MEGA);
     DRAMSim::TransactionCompleteCB *read_cb = new DRAMSim::Callback<System, void, unsigned, uint64_t, uint64_t>(this, &System::dram_read_complete);
     DRAMSim::TransactionCompleteCB *write_cb = new DRAMSim::Callback<System, void, unsigned, uint64_t, uint64_t>(this, &System::dram_write_complete);
-    dramsim->RegisterCallbacks(read_cb, NULL, NULL);
+    dramsim->RegisterCallbacks(read_cb, write_cb, NULL);
     dramsim->setCPUClockSpeed(1000ULL*1000*1000*1000/ps_per_clock);
 }
 
@@ -95,8 +95,6 @@ void System::console() {
 
 void System::tick(int clk) {
 
-    if (!clk) return;
-
     if (top->reset) {
         if (top->m_axi_arvalid || top->m_axi_awvalid)
             cerr << "Received a bus request during RESET.  Ignoring..." << endl;
@@ -105,6 +103,13 @@ void System::tick(int clk) {
         r_queue.clear();
         resp_queue.clear();
         snoop_queue.clear();
+        return;
+    }
+
+    if (!clk) {
+        if (top->m_axi_rvalid && top->m_axi_rready) r_queue.pop_front();
+        if (top->m_axi_bvalid && top->m_axi_bready) resp_queue.pop_front();
+        if (top->m_axi_acvalid && top->m_axi_acready) snoop_queue.erase(snoop_queue.begin());
         return;
     }
 
@@ -138,11 +143,10 @@ void System::tick(int clk) {
         top->m_axi_rdata = r_queue.begin()->first;
         top->m_axi_rid = r_queue.begin()->second.first;
         top->m_axi_rlast = r_queue.begin()->second.second;
-        if (top->m_axi_rready) r_queue.pop_front();
     }
 
     if (top->m_axi_awvalid) {
-        uint64_t w_addr = top->m_axi_awaddr & ~0x3fULL;
+        w_addr = top->m_axi_awaddr & ~0x3fULL;
 
         if (top->m_axi_awburst != 1) {
             cerr << "Write request with non-incr burst (" << std::dec << top->m_axi_awburst << ") unsupported" << endl;
@@ -169,14 +173,13 @@ void System::tick(int clk) {
         // if transfer is in progress, can't change mind about willAcceptTransaction()
         assert(willAcceptTransaction(w_addr));
         *((uint64_t*)(&ram[w_addr + (8-w_count)*8])) = top->m_axi_wdata;
-        --w_count;
+        if(--w_count == 0) assert(top->m_axi_wlast);
     }
 
     top->m_axi_bvalid = 0;
     if (!resp_queue.empty()) {
         top->m_axi_bvalid = 1;
         top->m_axi_bid = *resp_queue.begin();
-        if (top->m_axi_bready) resp_queue.pop_front();
     }
 
     top->m_axi_acvalid = 0;
@@ -184,7 +187,6 @@ void System::tick(int clk) {
         top->m_axi_acvalid = 1;
         top->m_axi_acaddr = *snoop_queue.begin();
         top->m_axi_acsnoop = 0xD; // MakeInvalid
-        if (top->m_axi_acready) snoop_queue.erase(snoop_queue.begin());
     }
 }
 
