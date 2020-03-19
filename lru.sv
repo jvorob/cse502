@@ -1,4 +1,6 @@
-    function reg [LRU_LEN-1:0] new_lru (input reg [LRU_LEN-1:0] old_lru, input int mru);
+`ifndef LRU
+`define LRU
+    function automatic reg [LRU_LEN-1:0] new_lru (input reg [LRU_LEN-1:0] old_lru, input int mru);
         parameter LRU_LEN = 5; // 5 bit is enough for 4-way
         case(old_lru)
         5'b00000: begin
@@ -259,3 +261,4 @@
         end
         endcase
     endfunction
+`endif

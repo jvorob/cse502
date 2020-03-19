@@ -82,6 +82,13 @@ module Icache
             end
     end
 
+    always_ff @ (posedge clk) begin
+        if (reset)
+            line_lru <= '{SETS{5'b0_01_00}}; // 3 2 1 0
+        else if (icache_valid)
+            line_lru[index] <= new_lru(line_lru[index], mru);
+    end
+
     assign out_inst = fetch_addr[LOG_WORD_LEN-1] ? inst_word[63:32] : inst_word[31:0];
     assign icache_m_axi_araddr = {rplc_pc[ADDR_WIDTH-1:LOG_WORD_LEN], {LOG_WORD_LEN{1'b0}}};
     assign icache_m_axi_acready = state == 3'h0;
@@ -92,7 +99,6 @@ module Icache
         if (reset) begin
             state <= 3'h0;
             line_valid <= '{SETS{'{WAYS{1'b0}}}};
-            line_lru <= '{SETS{5'b0_01_00}}; // 3 2 1 0
             rplc_pc <= 0;
             
             icache_m_axi_arid <= 0;      // transaction id
@@ -112,9 +118,7 @@ module Icache
                     for (snoop_way = 0; snoop_way < WAYS; snoop_way = snoop_way + 1)
                         if(line_tag[snoop_index][snoop_way] == snoop_tag)
                             line_valid[snoop_index][snoop_way] <= 1'b0;
-                end else if(icache_valid)
-                    line_lru[index] <= new_lru(line_lru[index], mru);
-                else
+                end else if(!icache_valid)
                     state <= 3'h1;
             end
             3'h1: begin // address channel
