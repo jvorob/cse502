@@ -1,5 +1,5 @@
 
-module mem_stage
+module MEM_Stage
 #(
     ID_WIDTH = 13,
     ADDR_WIDTH = 64,
@@ -15,52 +15,28 @@ module mem_stage
     input [63:0] ex_data2,
     input is_bubble,
 
+    //TODO: all these are for hazard stage, replace them with mem_busy
     output dcache_valid,
-    output write_done,
+    output write_done,      
     output logic dcache_en,
+
     output [63:0] mem_ex_rdata,
 
-    // AXI interface
-    output  reg  [ID_WIDTH-1:0]     dcache_m_axi_awid,
-    output  wire [ADDR_WIDTH-1:0]   dcache_m_axi_awaddr,
-    output  reg  [7:0]              dcache_m_axi_awlen,
-    output  reg  [2:0]              dcache_m_axi_awsize,
-    output  reg  [1:0]              dcache_m_axi_awburst,
-    output  reg                     dcache_m_axi_awlock,
-    output  reg  [3:0]              dcache_m_axi_awcache,
-    output  reg  [2:0]              dcache_m_axi_awprot,
-    output  wire                    dcache_m_axi_awvalid,
-    input   wire                    dcache_m_axi_awready,
-    output  wire [DATA_WIDTH-1:0]   dcache_m_axi_wdata,
-    output  reg  [STRB_WIDTH-1:0]   dcache_m_axi_wstrb,
-    output  wire                    dcache_m_axi_wlast,
-    output  wire                    dcache_m_axi_wvalid,
-    input   wire                    dcache_m_axi_wready,
-    input   wire [ID_WIDTH-1:0]     dcache_m_axi_bid,
-    input   wire [1:0]              dcache_m_axi_bresp,
-    input   wire                    dcache_m_axi_bvalid,
-    output  reg                     dcache_m_axi_bready,
-    output  reg  [ID_WIDTH-1:0]     dcache_m_axi_arid,
-    output  wire [ADDR_WIDTH-1:0]   dcache_m_axi_araddr,
-    output  reg  [7:0]              dcache_m_axi_arlen,
-    output  reg  [2:0]              dcache_m_axi_arsize,
-    output  reg  [1:0]              dcache_m_axi_arburst,
-    output  reg                     dcache_m_axi_arlock,
-    output  reg  [3:0]              dcache_m_axi_arcache,
-    output  reg  [2:0]              dcache_m_axi_arprot,
-    output  wire                    dcache_m_axi_arvalid,
-    input   wire                    dcache_m_axi_arready,
-    input   wire [ID_WIDTH-1:0]     dcache_m_axi_rid,
-    input   wire [DATA_WIDTH-1:0]   dcache_m_axi_rdata,
-    input   wire [1:0]              dcache_m_axi_rresp,
-    input   wire                    dcache_m_axi_rlast,
-    input   wire                    dcache_m_axi_rvalid,
-    output  wire                    dcache_m_axi_rready,
-    input   wire                    dcache_m_axi_acvalid,
-    output  wire                    dcache_m_axi_acready,
-    input   wire [ADDR_WIDTH-1:0]   dcache_m_axi_acaddr,
-    input   wire [3:0]              dcache_m_axi_acsnoop
+
+    // == D$ interface ports
+    output logic        dc_en,
+    output logic [63:0] dc_in_addr,
+
+    output logic        dc_write_en, // write=1, read=0
+    output logic [63:0] dc_in_wdata,
+    output logic [ 1:0] dc_in_wlen,  // wlen is log(#bytes), 3 = 64bit write
+
+    input  logic [63:0] dc_out_rdata,
+    input  logic        dc_out_rvalid,     //TODO: we should maybe merge rvalid and write_done
+    input  logic        dc_out_write_done
+
 );
+
     logic [63:0] mem_rdata;
     logic [63:0] mem_wr_data; // Write data
 
@@ -97,25 +73,26 @@ module mem_stage
     end
 
 
+    // === Wire requests to/from D-Cache
+    assign dc_en      = dcache_en;
+    assign dc_in_addr = ex_data;
+
+    assign dc_write_en = inst.is_store;
+    assign dc_in_wdata = mem_wr_data;
+    assign dc_in_wlen  = inst.funct3[1:0]; //is log of number of bytes written (3=>8-byte write)
+
+    assign mem_rdata    = dc_out_rdata;
+    assign dcache_valid = dc_out_rvalid;
+    assign write_done   = dc_out_write_done;
+
+
+
     // Dummy signals for waveform viewer
     logic is_load;
     logic is_store;
     assign is_load = inst.is_load;
     assign is_store = inst.is_store;
 
-    Dcache dcache (
-        .in_addr(ex_data),
-        .trns_tag(0),
-        .wdata(mem_wr_data),
-        .wlen(inst.funct3[1:0]),
-        .dcache_enable(dcache_en),
-        .wrn(inst.is_store),
-        .virtual_mode(1'b0),
-        .trns_tag_valid(1'b0),
-        .rdata(mem_rdata),
-        .dcache_valid(dcache_valid),
-        .write_done(write_done),
-        .*
-    );
+
 endmodule
 

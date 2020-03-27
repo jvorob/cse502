@@ -1,3 +1,6 @@
+`ifndef DCACHE
+`define DCACHE
+
 `include "lru.sv"
 
 module Dcache
@@ -231,3 +234,5 @@ module Dcache
         end
     end
 endmodule
+
+`endif

@@ -5,9 +5,8 @@
 `include "regfile.sv"
 `include "pipe_reg.sv"
 `include "hazard.sv"
-`include "icache.sv"
-`include "dcache.sv"
-`include "axi_interconnect.sv"
+`include "memory_system.sv"
+`include "mem_stage.sv"
 
 module top
 #(
@@ -140,35 +139,11 @@ module top
         end
     end
 
-    // === ICACHE stuff
- 
-    wire [ID_WIDTH-1:0]     icache_m_axi_arid;
-    wire [ADDR_WIDTH-1:0]   icache_m_axi_araddr;
-    wire [7:0]              icache_m_axi_arlen;
-    wire [2:0]              icache_m_axi_arsize;
-    wire [1:0]              icache_m_axi_arburst;
-    wire                    icache_m_axi_arlock;
-    wire [3:0]              icache_m_axi_arcache;
-    wire [2:0]              icache_m_axi_arprot;
-    wire                    icache_m_axi_arvalid;
-    wire                    icache_m_axi_arready;
-    wire [ID_WIDTH-1:0]     icache_m_axi_rid;
-    wire [DATA_WIDTH-1:0]   icache_m_axi_rdata;
-    wire [1:0]              icache_m_axi_rresp;
-    wire                    icache_m_axi_rlast;
-    wire                    icache_m_axi_rvalid;
-    wire                    icache_m_axi_rready;
-    wire                    icache_m_axi_acvalid;
-    wire                    icache_m_axi_acready;
-    wire [ADDR_WIDTH-1:0]   icache_m_axi_acaddr;
-    wire [3:0]              icache_m_axi_acsnoop;
-
-    Icache icache (
-            .icache_valid(IF_inst_valid),
-            .fetch_addr(IF_pc),
-            .out_inst(IF_inst),
-            .*
-    );
+    // ==== send I$ requests into memory system
+    logic [63:0] mem_sys_ic_req_addr; //cant assign directly to input of module, so do this instead
+    assign mem_sys_ic_req_addr = (IF_pc);
+    assign IF_inst_valid = (mem_sys.ic_resp_valid);
+    assign IF_inst =       (mem_sys.ic_resp_inst);
 
     // ------------------------END IF STAGE----------------------------
 
@@ -366,55 +341,16 @@ module top
 
     // ------------------------BEGIN MEM STAGE--------------------------
 
-    // AXI signals
-    wire [ID_WIDTH-1:0]     dcache_m_axi_awid;
-    wire [ADDR_WIDTH-1:0]   dcache_m_axi_awaddr;
-    wire [7:0]              dcache_m_axi_awlen;
-    wire [2:0]              dcache_m_axi_awsize;
-    wire [1:0]              dcache_m_axi_awburst;
-    wire                    dcache_m_axi_awlock;
-    wire [3:0]              dcache_m_axi_awcache;
-    wire [2:0]              dcache_m_axi_awprot;
-    wire                    dcache_m_axi_awvalid;
-    wire                    dcache_m_axi_awready;
-    wire [DATA_WIDTH-1:0]   dcache_m_axi_wdata;
-    wire [STRB_WIDTH-1:0]   dcache_m_axi_wstrb;
-    wire                    dcache_m_axi_wlast;
-    wire                    dcache_m_axi_wvalid;
-    wire                    dcache_m_axi_wready;
-    wire [ID_WIDTH-1:0]     dcache_m_axi_bid;
-    wire [1:0]              dcache_m_axi_bresp;
-    wire                    dcache_m_axi_bvalid;
-    wire                    dcache_m_axi_bready;
-    wire [ID_WIDTH-1:0]     dcache_m_axi_arid;
-    wire [ADDR_WIDTH-1:0]   dcache_m_axi_araddr;
-    wire [7:0]              dcache_m_axi_arlen;
-    wire [2:0]              dcache_m_axi_arsize;
-    wire [1:0]              dcache_m_axi_arburst;
-    wire                    dcache_m_axi_arlock;
-    wire [3:0]              dcache_m_axi_arcache;
-    wire [2:0]              dcache_m_axi_arprot;
-    wire                    dcache_m_axi_arvalid;
-    wire                    dcache_m_axi_arready;
-    wire [ID_WIDTH-1:0]     dcache_m_axi_rid;
-    wire [DATA_WIDTH-1:0]   dcache_m_axi_rdata;
-    wire [1:0]              dcache_m_axi_rresp;
-    wire                    dcache_m_axi_rlast;
-    wire                    dcache_m_axi_rvalid;
-    wire                    dcache_m_axi_rready;
-    wire                    dcache_m_axi_acvalid;
-    wire                    dcache_m_axi_acready;
-    wire [ADDR_WIDTH-1:0]   dcache_m_axi_acaddr;
-    wire [3:0]              dcache_m_axi_acsnoop;
 
     logic [63:0] mem_ex_rdata;   // Properly extended rdata
     logic dcache_en;
     logic dcache_valid;
     logic write_done;
 
-    mem_stage mem(
-        .clk(clk),
-        .reset(reset),
+    MEM_Stage mem_stage(
+        .clk,
+        .reset,
+
         .inst(MEM_reg.curr_deco),
         .ex_data(MEM_reg.curr_data),
         .ex_data2(MEM_reg.curr_data2),
@@ -423,7 +359,16 @@ module top
         .write_done(write_done),
         .dcache_en(dcache_en),
         .mem_ex_rdata(mem_ex_rdata),
-        .*
+
+        // === D$ interface (passed to MemorySystem)
+        .dc_en            (),  // input ports get read in at MemorySystem instantiation
+        .dc_in_addr       (),  // since you can't assign directly to an input port
+        .dc_write_en      (),
+        .dc_in_wdata      (),
+        .dc_in_wlen       (),
+        .dc_out_rdata     (mem_sys.dc_out_rdata),
+        .dc_out_rvalid    (mem_sys.dc_out_rvalid),
+        .dc_out_write_done(mem_sys.dc_out_write_done)
     );
 
     // ------------------------END MEM STAGE----------------------------
@@ -543,16 +488,36 @@ module top
         .wb_wr_en(wb_wr_en)
     );
 
-    AXI_interconnect axi_interconnect (.*);
 
-    always_ff @ (posedge clk) begin //Assert isntructions aligned
+    // ===== Icache and Dcache access is all routed into here
+    MemorySystem #( ID_WIDTH, ADDR_WIDTH, DATA_WIDTH, STRB_WIDTH) mem_sys(
+        .clk,
+        .reset,
+        .virtual_en(0),  //leave virtual memory disabled for now
+
+        //I$ ports
+        .ic_req_addr(mem_sys_ic_req_addr),  // this is assigned from a signal since it's an input
+        .ic_resp_inst(), .ic_resp_valid(),  // these can be read as mem_sys.xxx, since theyre outputs
+
+        //D$ ports
+        .dc_en      (mem_stage.dc_en), 
+        .dc_in_addr (mem_stage.dc_in_addr),
+        .dc_write_en(mem_stage.dc_write_en), // write=1, read=0
+        .dc_in_wdata(mem_stage.dc_in_wdata),
+        .dc_in_wlen (mem_stage.dc_in_wlen),  // wlen is log(#bytes), 3 = 64bit write
+
+        .dc_out_rdata(), .dc_out_rvalid(), .dc_out_write_done(),
+
+        .* //slurp all the AXI ports it needs
+    );
+
+
+
+
+    always_ff @ (posedge clk) begin //Assert intructions aligned
         if (IF_pc[1:0] != 2'b00) 
             $error("ERROR: executing unaligned instruction at IF_pc=%x", IF_pc);
     end
-
-   
-
-
 
 
     // ==== Termination counter logic:

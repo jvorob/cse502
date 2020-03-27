@@ -1,3 +1,6 @@
+`ifndef AXI_INTERCONNECT
+`define AXI_INTERCONNECT
+
 module AXI_interconnect
 #(
     ID_WIDTH = 13,
@@ -172,3 +175,5 @@ module AXI_interconnect
     assign m_axi_acready = icache_m_axi_acready & dcache_m_axi_acready;
 
 endmodule
+
+`endif

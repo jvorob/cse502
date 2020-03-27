@@ -1,3 +1,6 @@
+`ifndef ICACHE
+`define ICACHE
+
 `include "lru.sv"
 
 module Icache
@@ -145,3 +148,5 @@ module Icache
     end
 
 endmodule
+
+`endif
