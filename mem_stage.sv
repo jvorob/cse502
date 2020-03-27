@@ -104,11 +104,14 @@ module mem_stage
     assign is_store = inst.is_store;
 
     Dcache dcache (
-        .addr(ex_data),
+        .in_addr(ex_data),
+        .trns_tag(0),
         .wdata(mem_wr_data),
         .wlen(inst.funct3[1:0]),
         .dcache_enable(dcache_en),
         .wrn(inst.is_store),
+        .virtual_addr(1'b0),
+        .trns_tag_valid(1'b0),
         .rdata(mem_rdata),
         .dcache_valid(dcache_valid),
         .write_done(write_done),

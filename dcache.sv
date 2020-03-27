@@ -12,11 +12,14 @@ module Dcache
     input  reset,
     
     // Pipeline interface
-    input        [63:0]   addr,
+    input        [63:0]   in_addr,
+    input        [ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN] trns_tag,
     input        [63:0]   wdata,
     input        [ 1:0]   wlen, // len = 2 ^ wlen bytes
     input                 dcache_enable,
     input                 wrn, // write = 1 / read = 0
+    input                 virtual_addr, // determines "addr" is virtual or physical
+    input                 trns_tag_valid,
     output  reg  [63:0]   rdata,
     output  reg           dcache_valid,
     output  reg           write_done,
@@ -63,15 +66,15 @@ module Dcache
     input   wire [3:0]              dcache_m_axi_acsnoop
 );
 
-    localparam WORD_LEN = 8; // number of bytes in word
-    localparam LOG_WORD_LEN = 3; // log(number of bytes in word)
-    localparam LINE_LEN = 8; // number of words in line
-    localparam LOG_LINE_LEN = 3; // log(number of words in line)
-    localparam SIZE = 16 * 1024; // size of cache in bytes
-    localparam WAYS = 4; // 4-way
-    localparam SETS = SIZE / (WAYS * LINE_LEN * WORD_LEN); // number of sets in cache
-    localparam LOG_SETS = 6; // log(number of sets in cache)
-    localparam LRU_LEN = 5; // 5 bit is enough for 4-way
+    parameter WORD_LEN = 8; // number of bytes in word
+    parameter LOG_WORD_LEN = 3; // log(number of bytes in word)
+    parameter LINE_LEN = 8; // number of words in line
+    parameter LOG_LINE_LEN = 3; // log(number of words in line)
+    parameter SIZE = 16 * 1024; // size of cache in bytes
+    parameter WAYS = 4; // 4-way
+    parameter SETS = SIZE / (WAYS * LINE_LEN * WORD_LEN); // number of sets in cache
+    parameter LOG_SETS = 6; // log(number of sets in cache)
+    parameter LRU_LEN = 5; // 5 bit is enough for 4-way
 
     reg [DATA_WIDTH-1:0] mem [SETS][WAYS][LINE_LEN];
     reg [ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN] line_tag [SETS][WAYS];
@@ -91,6 +94,7 @@ module Dcache
     wire [ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN] snoop_tag = dcache_m_axi_acaddr[ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN];
     integer snoop_way;
 
+    wire [ADDR_WIDTH-1:0] addr = virtual_addr ? {trns_tag, in_addr[LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:0]} : in_addr;
     wire [LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_WORD_LEN] offset = addr[LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_WORD_LEN];
     wire [LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN] index = addr[LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN];
     wire [ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN] tag = addr[ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN];
@@ -105,8 +109,8 @@ module Dcache
         for (way = 0; way < WAYS; way = way + 1) 
             if (tag == line_tag[index][way] && line_valid[index][way]) begin
                 rdata = mem[index][way][offset];
-                dcache_valid = !dcache_m_axi_acvalid && dcache_enable && !wrn;
-                write_done = state == 3'h0 && !dcache_m_axi_acvalid && dcache_enable && wrn;
+                dcache_valid = !dcache_m_axi_acvalid && dcache_enable && (!virtual_addr || trns_tag_valid) && !wrn;
+                write_done = state == 3'h0 && !dcache_m_axi_acvalid && dcache_enable && (!virtual_addr || trns_tag_valid) && wrn;
                 mru = way;
             end
     end
@@ -160,7 +164,7 @@ module Dcache
                             line_valid[snoop_index][snoop_way] <= 1'b0;
                             line_dirty[snoop_index][snoop_way] <= 1'b0;
                         end
-                end else if(dcache_enable) begin
+                end else if(dcache_enable && (!virtual_addr || trns_tag_valid)) begin
                     rplc_addr <= addr;
                     rplc_way <= victim_way;
                     if(dcache_valid || write_done) begin // hit
