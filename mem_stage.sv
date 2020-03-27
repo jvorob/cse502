@@ -110,7 +110,7 @@ module mem_stage
         .wlen(inst.funct3[1:0]),
         .dcache_enable(dcache_en),
         .wrn(inst.is_store),
-        .virtual_addr(1'b0),
+        .virtual_mode(1'b0),
         .trns_tag_valid(1'b0),
         .rdata(mem_rdata),
         .dcache_valid(dcache_valid),
