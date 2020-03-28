@@ -87,10 +87,15 @@ module MemorySystem
     Icache icache (
             .clk, 
             .reset,
+        
+            .virtual_mode   (1'b0), // virtual-mode enable
 
-            .fetch_addr  (ic_req_addr),
-            .out_inst    (ic_resp_inst),
-            .icache_valid(ic_resp_valid),
+            .in_fetch_addr  (ic_req_addr),
+            .out_inst       (ic_resp_inst),
+            .icache_valid   (ic_resp_valid),
+
+            .trns_tag       (0),    //translation from tlb (TODO)
+            .trns_tag_valid (1'b0), //translation_valid    (TODO)
 
             .*  //this links all the icache_m_axi ports
     );
