@@ -188,21 +188,24 @@ module MMU
                 end
 
                 MMU_DONE: begin
-                    // TEMP HACK: as long as we don't have TLB, we can save
-                    // performance by staying on a given page as long as
-                    // people want translations from it
-                    
-                    // If we're currently serving port0, stay done as long as it needs
-                    if (req0_valid && (curr_port == 0) && req0_addr[63:12] == translate_addr[63:12])
-                        ;// stay in done mode
+                    //  // TEMP HACK: as long as we don't have TLB, we can save
+                    //  // performance by staying on a given page as long as
+                    //  // people want translations from it
+                    //  
+                    //  // If we're currently serving port0, stay done as long as it needs
+                    //  if (req0_valid && (curr_port == 0) && req0_addr[63:12] == translate_addr[63:12])
+                    //      ;// stay in done mode
 
-                    // If we're currently serving port1, stay done
-                    // however, yield to port0
-                    else if (req1_valid && (curr_port == 1) && !req0_valid && req1_addr[63:12] == translate_addr[63:12])
-                        ;// stay in done mode
+                    //  // If we're currently serving port1, stay done
+                    //  // however, yield to port0
+                    //  else if (req1_valid && (curr_port == 1) && !req0_valid && req1_addr[63:12] == translate_addr[63:12])
+                    //      ;// stay in done mode
 
-                    else 
-                        state <= MMU_IDLE;
+                    //  else 
+
+                    //Stays on Done for 1 cycle to output result
+                    //TODO: As an optimization, we can make this happen once cycle earlier
+                    state <= MMU_IDLE;
                 end
 
                 default: begin

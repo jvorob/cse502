@@ -147,8 +147,8 @@ module MemorySystem
         .dcache_valid(),
         .write_done  (),
 
-        .translated_addr      (),//(dtlb.pa), //translation from tlb (TODO: take from TLB, not MMU)
-        .translated_addr_valid(),//(dtlb.pa_valid),     //translation_valid, DTLB has port1 (TODO)
+        .translated_addr      (dtlb.pa),      // translation from D-TLB
+        .translated_addr_valid(dtlb.pa_valid),
 
         .* //this links all the dcache_m_axi ports
     );
@@ -166,8 +166,8 @@ module MemorySystem
             .out_inst       (ic_resp_inst),
             .icache_valid   (ic_resp_valid),
 
-            .translated_addr       (itlb.pa),    //translation from tlb
-            .translated_addr_valid (itlb.pa_valid),       //translation_valid (ITLB gets port1)
+            .translated_addr       (itlb.pa),       //translation from I-TLB
+            .translated_addr_valid (itlb.pa_valid), 
 
             .*  //this links all the icache_m_axi ports
     );
