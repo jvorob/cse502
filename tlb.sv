@@ -57,8 +57,8 @@ module Dtlb
 
     logic [1:0] state;
 
-    assign pa = tlb_pas[index][0];
-    assign pte_perm = perms[index][0];
+    //assign pa = tlb_pas[index][0]; //TODO: these seem like a bug?
+    //assign pte_perm = perms[index][0];
 
     always_ff @(posedge clk) begin
         if (reset) begin
