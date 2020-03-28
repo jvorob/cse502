@@ -31,7 +31,7 @@ module MMU
     input reset,
 
     // ====== Two input ports (from I/D TLB)
-    input  logic [63:0]          req0_addr,
+    input  logic [63:0]          req0_addr,  //Port 0 gets priority over port 1
     input  logic                 req0_valid,
 
     input  logic [63:0]          req1_addr,
@@ -117,9 +117,11 @@ module MMU
             resp_data_addr = leafToTranslatedAddress(final_pte, translate_addr_vpn, curr_level);
 
             if (curr_port == 0)
-                resp0_valid = 1;
+                // Don't say we're valid if the requested address changes suddenly
+                resp0_valid = translate_addr[63:12] == req0_addr[63:12];
             else
-                resp1_valid = 1;
+                // Don't say we're valid if the requested address changes suddenly
+                resp1_valid = translate_addr[63:12] == req1_addr[63:12];
         end
     end
 
@@ -186,7 +188,21 @@ module MMU
                 end
 
                 MMU_DONE: begin
-                    state <= MMU_IDLE;
+                    // TEMP HACK: as long as we don't have TLB, we can save
+                    // performance by staying on a given page as long as
+                    // people want translations from it
+                    
+                    // If we're currently serving port0, stay done as long as it needs
+                    if (req0_valid && (curr_port == 0) && req0_addr[63:12] == translate_addr[63:12])
+                        ;// stay in done mode
+
+                    // If we're currently serving port1, stay done
+                    // however, yield to port0
+                    else if (req1_valid && (curr_port == 1) && !req0_valid && req1_addr[63:12] == translate_addr[63:12])
+                        ;// stay in done mode
+
+                    else 
+                        state <= MMU_IDLE;
                 end
 
                 default: begin

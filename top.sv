@@ -493,10 +493,12 @@ module top
     MemorySystem #( ID_WIDTH, ADDR_WIDTH, DATA_WIDTH, STRB_WIDTH) mem_sys(
         .clk,
         .reset,
-        .virtual_en(0),  //leave virtual memory disabled for now
+        .satp,    //TODO: for now is value from HAVETLB, later will be from CSR
+        .virtual_en(1),  //leave virtual memory disabled for now
 
         //I$ ports
         .ic_req_addr(mem_sys_ic_req_addr),  // this is assigned from a signal since it's an input
+        .ic_en(1), // TODO: will we ever need to disable the I$?
         .ic_resp_inst(), .ic_resp_valid(),  // these can be read as mem_sys.xxx, since theyre outputs
 
         //D$ ports

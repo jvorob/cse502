@@ -15,9 +15,10 @@ module Icache
     
     // Pipeline interface
     input  [63:0]   in_fetch_addr,
-    input  [ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN] trns_tag,
+    //input  [ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN] trns_tag,
+    input  [63:0]   translated_addr,
     input           virtual_mode, // determines "in_fetch_addr" is virtual or physical
-    input           trns_tag_valid,
+    input           translated_addr_valid,
     output [31:0]   out_inst,
     output reg      icache_valid,
 
@@ -73,6 +74,8 @@ module Icache
     wire [LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_WORD_LEN] offset = fetch_addr[LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_WORD_LEN];
     wire [LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN] index = fetch_addr[LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN];
     wire [ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN] tag = fetch_addr[ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN];
+
+    wire [ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN] trns_tag = translated_addr[ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN];
     
     reg [DATA_WIDTH-1:0] inst_word;
     integer way;
@@ -84,7 +87,7 @@ module Icache
         for (way = 0; way < WAYS; way = way + 1) 
             if (tag == line_tag[index][way] && line_valid[index][way]) begin
                 inst_word = mem[index][way][offset];
-                icache_valid = !icache_m_axi_acvalid && (!virtual_mode || trns_tag_valid);
+                icache_valid = !icache_m_axi_acvalid && (!virtual_mode || translated_addr_valid);
                 mru = way;
             end
     end
@@ -125,7 +128,7 @@ module Icache
                     for (snoop_way = 0; snoop_way < WAYS; snoop_way = snoop_way + 1)
                         if(line_tag[snoop_index][snoop_way] == snoop_tag)
                             line_valid[snoop_index][snoop_way] <= 1'b0;
-                end else if(!icache_valid && (!virtual_mode || trns_tag_valid))
+                end else if(!icache_valid && (!virtual_mode || translated_addr_valid))
                     state <= 3'h1;
             end
             3'h1: begin // address channel
