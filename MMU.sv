@@ -1,9 +1,15 @@
-
+`ifndef MMU
+`define MMU
 
 typedef struct packed {
-    logic TODO;
-    //fill this in with the actual bits (resident, rwx?, superuser vs user?)
-
+    logic dirty;    // these 2 are updated on access/write
+    logic accessed;
+    logic glob;     // ??? 
+    logic usermode; //usermode can only access if U=1
+    logic exec;
+    logic write;
+    logic read;
+    logic valid;    //should always be 1 once we get it out of the pagetable
 } tlb_perm_bits;
 
 
@@ -34,13 +40,11 @@ module MMU
     // ====== Response (to I/D TLB)
     output logic [63:0]          resp_data_addr,  // the translated address
     output tlb_perm_bits         resp_data_perms, // that pages' permission bits
-
     // output logic                 mmu_busy, //might be useful to have? we only latch in a req once
 
     // response valid signals
     output logic                 resp0_valid, // if data is for port 0
     output logic                 resp1_valid, // if data is for port 1
-
 
 
     // ====== D-Cache interface (used to access memory)
@@ -108,11 +112,14 @@ module MMU
         resp0_valid = 0;
         resp1_valid = 0;
 
-        //TODO: also handle selecting between ports 0 and 1
         if (state == MMU_DONE) begin
-            resp0_valid = 1;
-            resp_data_perms = 0; //TODO
+            resp_data_perms = final_pte[7:0]; //bottom 8 bits are DAGUXWRV
             resp_data_addr = leafToTranslatedAddress(final_pte, translate_addr_vpn, curr_level);
+
+            if (curr_port == 0)
+                resp0_valid = 1;
+            else
+                resp1_valid = 1;
         end
     end
 
@@ -179,7 +186,7 @@ module MMU
                 end
 
                 MMU_DONE: begin
-                    // state <= MMU_IDLE
+                    state <= MMU_IDLE;
                 end
 
                 default: begin
@@ -230,3 +237,5 @@ module MMU
 
 
 endmodule
+
+`endif
