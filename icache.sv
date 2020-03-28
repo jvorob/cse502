@@ -14,7 +14,10 @@ module Icache
     input reset,
     
     // Pipeline interface
-    input  [63:0]   fetch_addr,
+    input  [63:0]   in_fetch_addr,
+    input  [ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN] trns_tag,
+    input           virtual_mode, // determines "in_fetch_addr" is virtual or physical
+    input           trns_tag_valid,
     output [31:0]   out_inst,
     output reg      icache_valid,
 
@@ -40,15 +43,15 @@ module Icache
     input   wire [ADDR_WIDTH-1:0]  icache_m_axi_acaddr,
     input   wire [3:0]             icache_m_axi_acsnoop
 );
-    localparam WORD_LEN = 8; // number of bytes in word
-    localparam LOG_WORD_LEN = 3; // log(number of bytes in word)
-    localparam LINE_LEN = 8; // number of words in line
-    localparam LOG_LINE_LEN = 3; // log(number of words in line)
-    localparam SIZE = 16 * 1024; // size of cache in bytes
-    localparam WAYS = 4; // 4-way
-    localparam SETS = SIZE / (WAYS * LINE_LEN * WORD_LEN); // number of sets in cache
-    localparam LOG_SETS = 6; // log(number of sets in cache)
-    localparam LRU_LEN = 5; // 5 bit is enough for 4-way
+    parameter WORD_LEN = 8; // number of bytes in word
+    parameter LOG_WORD_LEN = 3; // log(number of bytes in word)
+    parameter LINE_LEN = 8; // number of words in line
+    parameter LOG_LINE_LEN = 3; // log(number of words in line)
+    parameter SIZE = 16 * 1024; // size of cache in bytes
+    parameter WAYS = 4; // 4-way
+    parameter SETS = SIZE / (WAYS * LINE_LEN * WORD_LEN); // number of sets in cache
+    parameter LOG_SETS = 6; // log(number of sets in cache)
+    parameter LRU_LEN = 5; // 5 bit is enough for 4-way
 
     reg [DATA_WIDTH-1:0] mem [SETS][WAYS][LINE_LEN];
     reg [ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN] line_tag [SETS][WAYS];
@@ -66,6 +69,7 @@ module Icache
     wire [ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN] snoop_tag = icache_m_axi_acaddr[ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN];
     integer snoop_way;
 
+    wire [ADDR_WIDTH-1:0] fetch_addr = virtual_mode ? {trns_tag, in_fetch_addr[LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:0]} : in_fetch_addr;
     wire [LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_WORD_LEN] offset = fetch_addr[LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_WORD_LEN];
     wire [LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN] index = fetch_addr[LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN];
     wire [ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN] tag = fetch_addr[ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN];
@@ -80,7 +84,7 @@ module Icache
         for (way = 0; way < WAYS; way = way + 1) 
             if (tag == line_tag[index][way] && line_valid[index][way]) begin
                 inst_word = mem[index][way][offset];
-                icache_valid = !icache_m_axi_acvalid;
+                icache_valid = !icache_m_axi_acvalid && (!virtual_mode || trns_tag_valid);
                 mru = way;
             end
     end
@@ -121,7 +125,7 @@ module Icache
                     for (snoop_way = 0; snoop_way < WAYS; snoop_way = snoop_way + 1)
                         if(line_tag[snoop_index][snoop_way] == snoop_tag)
                             line_valid[snoop_index][snoop_way] <= 1'b0;
-                end else if(!icache_valid)
+                end else if(!icache_valid && (!virtual_mode || trns_tag_valid))
                     state <= 3'h1;
             end
             3'h1: begin // address channel
