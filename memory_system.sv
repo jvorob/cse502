@@ -1,8 +1,7 @@
 `include "dcache.sv"
 `include "icache.sv"
 `include "axi_interconnect.sv"
-// Make MMU is included before TLB because MMU has the PTE perm struct that TLB uses
-//`include "mmu.sv"
+`include "MMU.sv"
 `include "tlb.sv"
 
 // Wrapper module for all memory-interacting components
@@ -18,12 +17,12 @@ module MemorySystem
 (
     input clk,
     input reset,
-
-    // 1 = enable virtual memory/TLB use
-    // applies to both D$ and I$
-    input  logic        virtual_en, 
+    
+    input  logic        virtual_en, // 1 = enable virtual memory/TLB use (both for I/D cache)
+    input  logic [63:0] satp, //current value of SATP CSR (TODO TEMP: with havetlb hack, this is just an address)
 
     //=== External I$ interface
+    input  logic        ic_en,   //TODO: this is unused right now?
     input  logic [63:0] ic_req_addr,
     output logic [31:0] ic_resp_inst,
     output logic        ic_resp_valid,
@@ -84,83 +83,174 @@ module MemorySystem
 );
 
 
-    Icache icache (
-            .clk, 
-            .reset,
-        
-            .virtual_mode   (1'b0), // virtual-mode enable
+    /* Structure overview:
+     *   I$_in ports
+     *   D$_in ports
+     *
+     *   I$_in -> I$.port
+     *   if virtual: 
+     *      I$_in -> ITLB, ITLB -> I$.translated
+     *
+     *
+     *   D$_in -> D_MUX
+     *   MMU ->   D_MUX
+     *   if MMU_ovveride:
+     *      MMU-----mux--->D$
+     *   else:
+     *      D$_in---mux--->D$
+     *
+     *   if virtual:
+     *      D$_in -> DTLB, DTLB->D$.translated
+     */
 
-            .in_fetch_addr  (ic_req_addr),
-            .out_inst       (ic_resp_inst),
-            .icache_valid   (ic_resp_valid),
 
-            .trns_tag       (0),    //translation from tlb (TODO)
-            .trns_tag_valid (1'b0), //translation_valid    (TODO)
+    // Extra, muxed signals for D$
+    logic        dcmux_en;
+    logic [63:0] dcmux_in_addr;
+    logic        dcmux_write_en; // write=1, read=0
+    logic [63:0] dcmux_in_wdata;
+    logic [ 1:0] dcmux_in_wlen;  // wlen is log(#bytes), 3 = 64bit write
 
-            .*  //this links all the icache_m_axi ports
-    );
+    // === D$ input mux: switches D$ between serving outside request or serving MMU
+    // When mmu is using D$, input is always a read
+    assign dcmux_in_addr         = mmu.use_dcache ? mmu.dcache_req_addr : dc_in_addr;
+    assign dcmux_en              = mmu.use_dcache ? 1                   : dc_en;
+
+    assign dcmux_write_en        = mmu.use_dcache ? 0 : dc_write_en; 
+    assign dcmux_in_wdata        = mmu.use_dcache ? 0 : dc_in_wdata;
+    assign dcmux_in_wlen         = mmu.use_dcache ? 0 : dc_in_wlen;
+
+    // When mmu is using D$, disable all output
+    assign dc_out_rdata       = mmu.use_dcache ? 0 : dcache.rdata;
+    assign dc_out_rvalid      = mmu.use_dcache ? 0 : dcache.dcache_valid;
+    assign dc_out_write_done  = mmu.use_dcache ? 0 : dcache.write_done; 
+
+
+
+    // Switch DCache to physical mode when MMU is using it
+    logic dcmux_virtual_en;
+    assign dcmux_virtual_en = virtual_en && !mmu.use_dcache;
 
     Dcache dcache (
         .clk, 
         .reset,
+        .virtual_mode(dcmux_virtual_en), // virtual-mode enable
 
-        .virtual_mode(virtual_en), // virtual-mode enable
+        .dcache_enable(dcmux_en),
+        .in_addr(dcmux_in_addr),
 
-        .dcache_enable(dc_en),
-        .in_addr(dc_in_addr),
+        .wrn  (dcmux_write_en),
+        .wdata(dcmux_in_wdata),
+        .wlen (dcmux_in_wlen),
 
-        .wrn  (dc_write_en),
-        .wdata(dc_in_wdata),
-        .wlen (dc_in_wlen),
+        .rdata       (),
+        .dcache_valid(),
+        .write_done  (),
 
-        .rdata       (dc_out_rdata),
-        .dcache_valid(dc_out_rvalid),
-        .write_done  (dc_out_write_done),
-
-        .trns_tag(0),           //translation from tlb (TODO)
-        .trns_tag_valid(1'b0),  //translation_valid    (TODO)
+        .translated_addr      (),//(dtlb.pa), //translation from tlb (TODO: take from TLB, not MMU)
+        .translated_addr_valid(),//(dtlb.pa_valid),     //translation_valid, DTLB has port1 (TODO)
 
         .* //this links all the dcache_m_axi ports
     );
 
 
+
+    // =================== Icache is fairly straightforward
+    Icache icache (
+            .clk, 
+            .reset,
+        
+            .virtual_mode   (virtual_en), // virtual-mode enable
+
+            .in_fetch_addr  (ic_req_addr),
+            .out_inst       (ic_resp_inst),
+            .icache_valid   (ic_resp_valid),
+
+            .translated_addr       (itlb.pa),    //translation from tlb
+            .translated_addr_valid (itlb.pa_valid),       //translation_valid (ITLB gets port1)
+
+            .*  //this links all the icache_m_axi ports
+    );
+
+
+
+    // =================== TLBs
+    //only need to query the tlbs if virt mode is enabled and $ is being accessed
+    logic dtlb_req_valid; 
+    logic itlb_req_valid;
+    assign dtlb_req_valid = virtual_en && dc_en;
+    assign itlb_req_valid = virtual_en; // TODO: once we have I$_en, add that in
+
+    
     Dtlb dtlb(
        .clk,
        .reset,
        
-       .va_valid(0 /* Signal a translation request */),
-       .va(dc_in_addr),
-       .pa_valid(),
+       .va_valid(dtlb_req_valid), //Input
+       .va      (dc_in_addr),
+       .pa_valid(),               //Out to D$
        .pa(),
-       .pte_perm(/* Not too sure how we should use this yet */),
+       .pte_perm(/* TODO: make use of this once we start checking permissions */),
 
-        // mmu connections
-       .req_addr(),
-       .req_valid(),
-
-       .resp_addr(),
-       .resp_perm_bits(),
-       .resp_valid()
+        // MMU connection
+       .req_addr (),                             //Out to mmu
+       .req_valid(), // set on TLB miss
+       .resp_addr     (mmu.resp_data_addr),      //In from mmu
+       .resp_perm_bits(mmu.resp_data_perms),
+       .resp_valid    (mmu.resp0_valid)   //DTLB is on port0
     );
 
     Itlb itlb(
        .clk,
        .reset,
        
-       .va_valid(0),
-       .va(ic_req_addr),
-       .pa_valid(),
+       .va_valid(itlb_req_valid), // Input
+       .va      (ic_req_addr),
+       .pa_valid(),               // Out to D$
        .pa(),
-       .pte_perm(),
+       .pte_perm(/*TODO*/),
+        
 
-       .req_addr(),
-       .req_valid(),
-
-       .resp_addr(),
-       .resp_perm_bits(),
-       .resp_valid()
+       // MMU Connection
+       .req_addr(),                          //Out to MMU
+       .req_valid(),  //set on TLB miss
+       .resp_addr     (mmu.resp_data_addr),  //In from MMU
+       .resp_perm_bits(mmu.resp_data_perms),
+       .resp_valid    (mmu.resp1_valid)
     );
 
+
+
+    // =================== MMU
+
+    //TODO: once we have a tlb, the tlbs will pass on misses to MMU
+    //for now, just send all TLB directly requests to MMU
+    MMU mmu (
+        .clk,
+        .reset,
+
+        // ====== Two input ports (from I/D TLB)
+        .req0_addr (dtlb.req_addr),      //port0 is for D-TLB (takes priority)
+        .req0_valid(dtlb.req_valid),
+        .req1_addr (itlb.req_addr),      //port1 is for I-TLB
+        .req1_valid(itlb.req_valid),
+
+        // ====== Response (to I/D TLB)
+        .resp_data_addr(),  
+        .resp_data_perms(), 
+        .resp0_valid(), // if data is for port 0
+        .resp1_valid(), // if data is for port 1
+
+        // ====== D-Cache interface (used to access memory)
+        .use_dcache(), // outputs
+        .dcache_req_addr(),
+        .dcache_resp_valid(dcache.dcache_valid), //inputs
+        .dcache_resp_data (dcache.rdata),
+
+        // ====== MISC
+        .root_pt_addr(satp) // Currently set by havetlb hack, later will be from csr
+    );
+    
 
 
     // this grabs all the m_axi, icache_m_axi, and dcache_m_axi ports

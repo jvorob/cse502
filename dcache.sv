@@ -16,16 +16,17 @@ module Dcache
     
     // Pipeline interface
     input        [63:0]   in_addr,
-    input        [ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN] trns_tag,
     input        [63:0]   wdata,
     input        [ 1:0]   wlen, // len = 2 ^ wlen bytes
     input                 dcache_enable,
     input                 wrn, // write = 1 / read = 0
     input                 virtual_mode, // determines "in_addr" is virtual or physical
-    input                 trns_tag_valid,
     output  reg  [63:0]   rdata,
     output  reg           dcache_valid,
     output  reg           write_done,
+
+    input        [63:0]   translated_addr,
+    input                 translated_addr_valid,
 
     // AXI interface
     output  reg  [ID_WIDTH-1:0]     dcache_m_axi_awid,
@@ -102,6 +103,8 @@ module Dcache
     wire [LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN] index = addr[LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN];
     wire [ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN] tag = addr[ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN];
 
+    wire [ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN] trns_tag = translated_addr[ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN];
+
     integer way;
     integer mru;
     always_comb begin
@@ -112,8 +115,8 @@ module Dcache
         for (way = 0; way < WAYS; way = way + 1) 
             if (tag == line_tag[index][way] && line_valid[index][way]) begin
                 rdata = mem[index][way][offset];
-                dcache_valid = !dcache_m_axi_acvalid && dcache_enable && (!virtual_mode || trns_tag_valid) && !wrn;
-                write_done = state == 3'h0 && !dcache_m_axi_acvalid && dcache_enable && (!virtual_mode || trns_tag_valid) && wrn;
+                dcache_valid = !dcache_m_axi_acvalid && dcache_enable && (!virtual_mode || translated_addr_valid) && !wrn;
+                write_done = state == 3'h0 && !dcache_m_axi_acvalid && dcache_enable && (!virtual_mode || translated_addr_valid) && wrn;
                 mru = way;
             end
     end
@@ -167,7 +170,7 @@ module Dcache
                             line_valid[snoop_index][snoop_way] <= 1'b0;
                             line_dirty[snoop_index][snoop_way] <= 1'b0;
                         end
-                end else if(dcache_enable && (!virtual_mode || trns_tag_valid)) begin
+                end else if(dcache_enable && (!virtual_mode || translated_addr_valid)) begin
                     rplc_addr <= addr;
                     rplc_way <= victim_way;
                     if(dcache_valid || write_done) begin // hit

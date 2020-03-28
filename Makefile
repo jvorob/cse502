@@ -6,7 +6,7 @@ RUNELF=/shared/cse502/tests/project/prog1
 #RUNELF=../test_progs/wp2_prog3_noret.o
 
 TRACE?=--trace
-HAVETLB=n
+HAVETLB=y
 
 VFILES=$(wildcard *.sv)
 CFILES=$(wildcard *.cpp)

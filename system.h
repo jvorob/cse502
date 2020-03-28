@@ -15,8 +15,8 @@
 #define GIGA (1024UL*1024*1024)
 
 #define PAGE_SIZE       (4096UL)
-#define VALID_PAGE_DIR  (0b0000000011)
-#define VALID_PAGE      (0b0000000001)
+#define VALID_PAGE_DIR  (0b0000000001) //RISCV nonleaf pages must be rwx=0, v=1
+#define VALID_PAGE      (0b0000001111) // This is a rwx leaf (for now). Later will be more specific about perms
 
 typedef unsigned long __uint64_t;
 typedef __uint64_t uint64_t;
