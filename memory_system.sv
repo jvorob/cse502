@@ -1,8 +1,7 @@
 `include "dcache.sv"
 `include "icache.sv"
 `include "axi_interconnect.sv"
-// Make MMU is included before TLB because MMU has the PTE perm struct that TLB uses
-//`include "mmu.sv"
+`include "MMU.sv"
 `include "tlb.sv"
 
 // Wrapper module for all memory-interacting components
@@ -104,24 +103,6 @@ module MemorySystem
      *      D$_in -> DTLB, DTLB->D$.translated
      */
 
-    Icache icache (
-            .clk, 
-            .reset,
-        
-            .virtual_mode   (virtual_en), // virtual-mode enable
-
-            .in_fetch_addr  (ic_req_addr),
-            .out_inst       (ic_resp_inst),
-            .icache_valid   (ic_resp_valid),
-
-            //TODO: taking it from MMU is a hack, ultimately this should come from TLB
-            .translated_addr       (mmu.resp_data_addr),    //translation from tlb
-            .translated_addr_valid (mmu.resp1_valid),       //translation_valid (ITLB gets port1)
-
-            .*  //this links all the icache_m_axi ports
-    );
-
-
 
     // Extra, muxed signals for D$
     logic        dcmux_en;
@@ -166,55 +147,81 @@ module MemorySystem
         .dcache_valid(),
         .write_done  (),
 
-        .translated_addr      (mmu.resp_data_addr), //translation from tlb (TODO: take from TLB, not MMU)
-        .translated_addr_valid(mmu.resp0_valid),     //translation_valid, DTLB has port1 (TODO)
+        .translated_addr      (),//(dtlb.pa), //translation from tlb (TODO: take from TLB, not MMU)
+        .translated_addr_valid(),//(dtlb.pa_valid),     //translation_valid, DTLB has port1 (TODO)
 
         .* //this links all the dcache_m_axi ports
     );
 
 
+
+    // =================== Icache is fairly straightforward
+    Icache icache (
+            .clk, 
+            .reset,
+        
+            .virtual_mode   (virtual_en), // virtual-mode enable
+
+            .in_fetch_addr  (ic_req_addr),
+            .out_inst       (ic_resp_inst),
+            .icache_valid   (ic_resp_valid),
+
+            .translated_addr       (itlb.pa),    //translation from tlb
+            .translated_addr_valid (itlb.pa_valid),       //translation_valid (ITLB gets port1)
+
+            .*  //this links all the icache_m_axi ports
+    );
+
+
+
+    // =================== TLBs
+    //only need to query the tlbs if virt mode is enabled and $ is being accessed
+    logic dtlb_req_valid; 
+    logic itlb_req_valid;
+    assign dtlb_req_valid = virtual_en && dc_en;
+    assign itlb_req_valid = virtual_en; // TODO: once we have I$_en, add that in
+
+    
     Dtlb dtlb(
        .clk,
        .reset,
        
-       .va_valid(0 /* Signal a translation request */),
-       .va(dc_in_addr),
-       .pa_valid(),
+       .va_valid(dtlb_req_valid), //Input
+       .va      (dc_in_addr),
+       .pa_valid(),               //Out to D$
        .pa(),
-       .pte_perm(/* Not too sure how we should use this yet */),
+       .pte_perm(/* TODO: make use of this once we start checking permissions */),
 
-        // mmu connections
-       .req_addr(),
-       .req_valid(),
-
-       .resp_addr(),
-       .resp_perm_bits(),
-       .resp_valid()
+        // MMU connection
+       .req_addr (),                             //Out to mmu
+       .req_valid(), // set on TLB miss
+       .resp_addr     (mmu.resp_data_addr),      //In from mmu
+       .resp_perm_bits(mmu.resp_data_perms),
+       .resp_valid    (mmu.resp0_valid)   //DTLB is on port0
     );
 
     Itlb itlb(
        .clk,
        .reset,
        
-       .va_valid(0),
-       .va(ic_req_addr),
-       .pa_valid(),
+       .va_valid(itlb_req_valid), // Input
+       .va      (ic_req_addr),
+       .pa_valid(),               // Out to D$
        .pa(),
-       .pte_perm(),
+       .pte_perm(/*TODO*/),
+        
 
-       .req_addr(),
-       .req_valid(),
-
-       .resp_addr(),
-       .resp_perm_bits(),
-       .resp_valid()
+       // MMU Connection
+       .req_addr(),                          //Out to MMU
+       .req_valid(),  //set on TLB miss
+       .resp_addr     (mmu.resp_data_addr),  //In from MMU
+       .resp_perm_bits(mmu.resp_data_perms),
+       .resp_valid    (mmu.resp1_valid)
     );
 
-    //only need to query the tlbs if virt mode is enabled and $ is being accessed
-    logic dtlb_req_valid; 
-    logic itlb_req_valid;
-    assign dtlb_req_valid = virtual_en && dc_en;
-    assign itlb_req_valid = virtual_en; // TODO: once we have I$_en, add that in
+
+
+    // =================== MMU
 
     //TODO: once we have a tlb, the tlbs will pass on misses to MMU
     //for now, just send all TLB directly requests to MMU
@@ -223,10 +230,10 @@ module MemorySystem
         .reset,
 
         // ====== Two input ports (from I/D TLB)
-        .req0_addr (dc_in_addr),      //port0 is for DTLB (takes priority)
-        .req0_valid(dtlb_req_valid),
-        .req1_addr (ic_req_addr),      //port1 is o ofr ITLB
-        .req1_valid(itlb_req_valid),
+        .req0_addr (dtlb.req_addr),      //port0 is for D-TLB (takes priority)
+        .req0_valid(dtlb.req_valid),
+        .req1_addr (itlb.req_addr),      //port1 is for I-TLB
+        .req1_valid(itlb.req_valid),
 
         // ====== Response (to I/D TLB)
         .resp_data_addr(),  

@@ -1,8 +1,9 @@
-// This file holds the D-TLB and I-TLB
+`ifndef TLB
+`define TLB
 
-// This is a temporary hack to allow compilation. Janet will
-// replace the real typedef struct.
-typedef logic[7:0] tlb_perm_bits;
+`include "MMU.sv" //for definition of 'tlb_perm_bits'
+
+// This file holds the D-TLB and I-TLB
 
 module Dtlb
 #(
@@ -148,3 +149,4 @@ module Itlb
 
 endmodule
 
+`endif
