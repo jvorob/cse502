@@ -1,6 +1,9 @@
 `include "dcache.sv"
 `include "icache.sv"
 `include "axi_interconnect.sv"
+// Make MMU is included before TLB because MMU has the PTE perm struct that TLB uses
+//`include "mmu.sv"
+`include "tlb.sv"
 
 // Wrapper module for all memory-interacting components
 // (caches, TLBs, MMU)
@@ -115,7 +118,44 @@ module MemorySystem
         .* //this links all the dcache_m_axi ports
     );
 
-    
+
+    Dtlb dtlb(
+       .clk,
+       .reset,
+       
+       .va_valid(0 /* Signal a translation request */),
+       .va(dc_in_addr),
+       .pa_valid(),
+       .pa(),
+       .pte_perm(/* Not too sure how we should use this yet */),
+
+        // mmu connections
+       .req_addr(),
+       .req_valid(),
+
+       .resp_addr(),
+       .resp_perm_bits(),
+       .resp_valid()
+    );
+
+    Itlb itlb(
+       .clk,
+       .reset,
+       
+       .va_valid(0),
+       .va(ic_req_addr),
+       .pa_valid(),
+       .pa(),
+       .pte_perm(),
+
+       .req_addr(),
+       .req_valid(),
+
+       .resp_addr(),
+       .resp_perm_bits(),
+       .resp_valid()
+    );
+
 
 
     // this grabs all the m_axi, icache_m_axi, and dcache_m_axi ports
