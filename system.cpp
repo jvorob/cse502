@@ -252,6 +252,7 @@ uint64_t System::get_pte(uint64_t base_addr, int vpn, bool isleaf, bool& allocat
             (*(uint64_t*)&ram[addr]) = (page_no<<10) | VALID_PAGE;
         else
             (*(uint64_t*)&ram[addr]) = (page_no<<10) | VALID_PAGE_DIR;
+        invalidate(addr);
         pte = *(uint64_t*) & ram[addr];
         if (VM_DEBUG) {
             cout << "Addr:" << std::dec << addr << endl;
