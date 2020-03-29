@@ -74,11 +74,11 @@ module top
 
     // Traffic controller signals:
     // gen_bubble
-    logic gen_if_bubble;
-    logic gen_id_bubble;
-    logic gen_ex_bubble;
-    logic gen_mem_bubble;
-	logic gen_wb_bubble;
+    logic if_gen_bubble;
+    logic id_gen_bubble;
+    logic ex_gen_bubble;
+    logic mem_gen_bubble;
+    logic wb_gen_bubble;
 
     // wr_en
     logic id_wr_en;
@@ -103,7 +103,7 @@ module top
     // instruction currently in IF goes into the pipeline, which happens
     // when ID reg is taking in a fresh instruction
     logic IF_is_executing;
-    assign IF_is_executing = (id_wr_en) && !(gen_if_bubble); //TODO: gen_if means ID will be getting the bubble
+    assign IF_is_executing = id_wr_en && !id_gen_bubble;
 
 
     // IF-stage PC logic
@@ -153,7 +153,7 @@ module top
 
         //traffic signals
         .wr_en(id_wr_en),
-        .gen_bubble(gen_if_bubble), // ID gets bubble if IF stalled (since IF can't have a bubble itself)
+        .gen_bubble(id_gen_bubble),
         .bubble(),
 
         // incoming signals for next step's ID
@@ -222,7 +222,7 @@ module top
 
         //traffic signals
         .wr_en(ex_wr_en),
-        .gen_bubble(ID_reg.bubble || gen_id_bubble),
+        .gen_bubble(ID_reg.bubble || ex_gen_bubble),
         .bubble(),
 
         // Data coming in from ID + RF stage
@@ -322,7 +322,7 @@ module top
         
         //traffic signals
         .wr_en(mem_wr_en),
-        .gen_bubble(EX_reg.bubble || gen_ex_bubble),
+        .gen_bubble(EX_reg.bubble || mem_gen_bubble),
         .bubble(),
 
         // Data coming in from EX
@@ -379,7 +379,7 @@ module top
 
         //traffic signals
         .wr_en(wb_wr_en),
-        .gen_bubble(MEM_reg.bubble || gen_mem_bubble),
+        .gen_bubble(MEM_reg.bubble || wb_gen_bubble),
         .bubble(),
 
         // Data signals coming in from MEM
@@ -474,11 +474,11 @@ module top
 		.flush_before_ex(flush_before_ex),
 
         // Output gen bubbles
-        .if_bubble(gen_if_bubble),
-        .id_bubble(gen_id_bubble),
-        .ex_bubble(gen_ex_bubble),
-        .mem_bubble(gen_mem_bubble),
-		.wb_bubble(gen_wb_bubble),
+        // IF will never get a bubble, we always have some intruction we're trying to fetch
+        .id_gen_bubble(id_gen_bubble),
+        .ex_gen_bubble(ex_gen_bubble),
+        .mem_gen_bubble(mem_gen_bubble),
+        .wb_gen_bubble(wb_gen_bubble),
 
         // Output wr_en
         .if_wr_en(if_wr_en),

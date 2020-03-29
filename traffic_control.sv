@@ -10,11 +10,11 @@ module traffic_control(
     input flush_before_wb,
 	input flush_before_ex,
 
-    output if_bubble,
-    output id_bubble,
-    output ex_bubble,
-    output mem_bubble,
-    output wb_bubble,
+    // If stage_wr_en is also high, causes that stage to clock in a bubble (no instruction)
+    output id_gen_bubble,
+    output ex_gen_bubble,
+    output mem_gen_bubble,
+    output wb_gen_bubble,
 
     output if_wr_en,
     output id_wr_en,
@@ -33,36 +33,33 @@ module traffic_control(
         if_wr_en = ((id_wr_en == 1) && (if_stall == 0)) ||
                    (flush_before_wb || flush_before_ex); //in this case, IF_next_pc will also be changed
 
-        wb_bubble = wb_stall;
-        mem_bubble = mem_stall;
-        ex_bubble = ex_stall;
-        id_bubble = id_stall;
-        if_bubble = if_stall;
+        wb_gen_bubble = mem_stall;
+        mem_gen_bubble = ex_stall;
+        ex_gen_bubble = id_stall;
+        id_gen_bubble = if_stall;
 
 		if (flush_before_wb) begin
-            // Will turn everything into bubbles.
-            // If it's possible for WB to stall, we need to come back and add
-            // in some logic to prevent the WB pipe reg from getting a bubble.
-            // In the meantime, WB can't stall, so we are ok.
+            //NOTE: wb currently stalls for one cycle on ecall, due to the ecall fakeos hack
+            //if (wb_stall)
+            //    $error("Traffic control: WB stage shouldn't be able to stall");
 
-            if_bubble = 1;
-            id_bubble = 1;
-            ex_bubble = 1;
-            mem_bubble = 1;
+            id_gen_bubble = 1;
+            ex_gen_bubble = 1;
+            mem_gen_bubble = 1;
+            wb_gen_bubble = 1; //we're dumping contents of MEM_stage, so on next cycle WB will inherit MEM's bubble
 
-			// wb_wr_en = 1; // This might cause a bug if it's added?
-            mem_wr_en = 1;
-            ex_wr_en = 1;
             id_wr_en = 1;
+            ex_wr_en = 1;
+            mem_wr_en = 1;
+            // if wb_wr_en is set, it will inherit the bubble. Otherwise it can stall as normal
         end
 		else if (flush_before_ex) begin
             // next contents of ID and EX registers, if any, will be bubbles
             // (dump them)
-			if_bubble = 1;
-            id_bubble = 1;
+            id_gen_bubble = 1;
+            ex_gen_bubble = 1;
 
 			id_wr_en = 1;  // ID gets dumped even if stalled
-
             // EX will be cleared, but it's currently holding the jump
             // EX may stall, so don't wr_en until it can advance normally
             // jump will re-execute continuously as long as it's stalled
