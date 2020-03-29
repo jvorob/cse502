@@ -1,12 +1,12 @@
 .PHONY: all run clean submit
 
-#RUNELF=/shared/cse502/tests/wp2/prog3.o
-#RUNELF=../test_progs/test1.o
-RUNELF=/shared/cse502/tests/project/prog1
-#RUNELF=../test_progs/wp2_prog3_noret.o
+PROG=/shared/cse502/tests/project/prog1
+#PROG=/shared/cse502/tests/wp1/prog1.o
+#PROG=/shared/cse502/tests/linux.bbl
 
-TRACE?=--trace  #Comment out the --trace to disable
-HAVETLB=y
+TRACE?=--trace #Comment out --trace to disable
+HAVETLB=n
+FULLSYSTEM=n
 
 VFILES=$(wildcard *.sv)
 CFILES=$(wildcard *.cpp)
@@ -24,7 +24,7 @@ obj_dir/Vtop.mk: $(VFILES) $(CFILES)
 	-LDFLAGS -lncurses -LDFLAGS -lelf -LDFLAGS -lrt
 
 run: obj_dir/Vtop
-	cd obj_dir/ && env HAVETLB=$(HAVETLB) ./Vtop $(RUNELF)
+	cd obj_dir/ && env HAVETLB=$(HAVETLB) FULLSYSTEM=$(FULLSYSTEM) ./Vtop $(PROG)
 
 clean:
 	rm -rf obj_dir/ dramsim2/results trace.vcd core 

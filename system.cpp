@@ -21,13 +21,18 @@ using namespace std;
 
 System* System::sys;
 
-System::System(Vtop* top, unsigned ramsize, const char* ramelf, const int argc, char* argv[], int ps_per_clock)
-    : top(top), ps_per_clock(ps_per_clock), ramsize(ramsize), max_elf_addr(0), show_console(false), interrupts(0), w_count(0), ticks(0), ecall_brk(0), errno_addr(NULL)
+System::System(Vtop* top, uint64_t ramsize, const char* binaryfn, const int argc, char* argv[], int ps_per_clock)
+    : top(top), ps_per_clock(ps_per_clock), ramsize(ramsize), dram_offset(0), max_elf_addr(0), show_console(false), interrupts(0), w_count(0), ticks(0), ecall_brk(0), errno_addr(0ULL)
 {
     sys = this;
 
     char* HAVETLB = getenv("HAVETLB");
     use_virtual_memory = HAVETLB && (toupper(*HAVETLB) == 'Y');
+
+    char* FULLSYSTEM = getenv("FULLSYSTEM");
+    full_system = FULLSYSTEM && (toupper(*FULLSYSTEM) == 'Y');
+
+    assert(!full_system || !use_virtual_memory);
 
     string ram_fn = string("/vtop-system-")+to_string(getpid());
     ram_fd = shm_open(ram_fn.c_str(), O_RDWR|O_CREAT|O_EXCL, 0600);
@@ -36,33 +41,40 @@ System::System(Vtop* top, unsigned ramsize, const char* ramelf, const int argc, 
     assert(ftruncate(ram_fd, ramsize) == 0);
     ram = (char*)mmap(NULL, ramsize, PROT_READ|PROT_WRITE, MAP_SHARED, ram_fd, 0);
     assert(ram != MAP_FAILED);
-    if (!use_virtual_memory) ram_virt = ram;
-    else ram_virt = (char*)mmap(NULL, ramsize, PROT_NONE, MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
-    assert(ram_virt != MAP_FAILED);
-    top->satp = get_phys_page() << 12;
-    top->stackptr = ramsize - 4*MEGA;
-    for(int n = 1; n < STACK_PAGES; ++n) virt_to_phy(top->stackptr - PAGE_SIZE*n); // allocate stack pages
-
-    uint64_t* argvp = (uint64_t*)(ram+virt_to_phy(top->stackptr));
-    argvp[0] = argc;
-    uint64_t dst = top->stackptr + 8/*argc*/ + 8*argc + 8/*envp*/ + 8/*env*/;
-    argvp[argc+1] = dst-8; // envp
-    argvp[argc+2] = 0; // env array
-    for(int arg = 0; arg < argc; ++arg) {
-        argvp[arg+1] = dst;
-        char* src = argv[arg];
-        do {
-            virt_to_phy(dst); // make sure phys page is allocated
-            ram_virt[dst] = *src;
-            dst++;
-        } while(*(src++));
+    if (use_virtual_memory) {
+      ram_virt = (char*)mmap(NULL, ramsize, PROT_NONE, MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
+      assert(ram_virt != MAP_FAILED);
+    } else {
+      ram_virt = ram;
+      if (full_system) dram_offset = -DRAM_OFFSET;
     }
-    virt_to_phy(0); // TODO: must initialize auxv vector with AT_RANDOM value.  until then, _dl_random will be a null pointer, so need to prefault address 0
 
     // load the program image
-    if (ramelf) top->entry = load_elf(ramelf);
+    if (binaryfn) top->entry = load_binary(binaryfn);
 
-    ecall_brk = max_elf_addr;
+    if (!full_system) {
+      ecall_brk = max_elf_addr;
+
+      top->satp = get_phys_page() << 12;
+      top->stackptr = ramsize - 4*MEGA;
+      for(int n = 1; n < STACK_PAGES; ++n) virt_to_phy(top->stackptr - PAGE_SIZE*n); // allocate stack pages
+
+      uint64_t* argvp = (uint64_t*)(ram+virt_to_phy(top->stackptr));
+      argvp[0] = argc;
+      uint64_t dst = top->stackptr + 8/*argc*/ + 8*argc + 8/*envp*/ + 8/*env*/;
+      argvp[argc+1] = dst-8; // envp
+      argvp[argc+2] = 0; // env array
+      for(int arg = 0; arg < argc; ++arg) {
+          argvp[arg+1] = dst;
+          char* src = argv[arg];
+          do {
+              virt_to_phy(dst); // make sure phys page is allocated
+              ram_virt[dst] = *src;
+              dst++;
+          } while(*(src++));
+      }
+      virt_to_phy(0); // TODO: must initialize auxv vector with AT_RANDOM value.  until then, _dl_random will be a null pointer, so need to prefault address 0
+    }
 
     // create the dram simulator
     dramsim = DRAMSim::getMemorySystemInstance("DDR2_micron_16M_8b_x8_sg3E.ini", "system.ini", "../dramsim2", "dram_result", ramsize / MEGA);
@@ -74,6 +86,7 @@ System::System(Vtop* top, unsigned ramsize, const char* ramelf, const int argc, 
 
 System::~System() {
     assert(munmap(ram, ramsize) == 0);
+    assert(!use_virtual_memory || munmap(ram_virt, ramsize) == 0);
     assert(close(ram_fd) == 0);
 
     if (show_console) {
@@ -94,7 +107,6 @@ void System::console() {
 }
 
 void System::tick(int clk) {
-
 
     if (top->reset) {
         if (top->m_axi_arvalid || top->m_axi_awvalid)
@@ -124,7 +136,7 @@ void System::tick(int clk) {
         } else if (top->m_axi_arlen+1 != 8) {
               cerr << "Read request with length != 8 (" << std::dec << top->m_axi_arlen << "+1)" << endl;
               Verilated::gotFinish(true);
-        } else if (xfer_addr > (ramsize - 64)) {
+        } else if (xfer_addr > (dram_offset + ramsize - 64)) {
             cerr << "Invalid 64-byte access, address " << std::hex << xfer_addr << " is beyond end of memory at " << ramsize << endl;
             Verilated::gotFinish(true);
         } else if (addr_to_tag.find(xfer_addr)!=addr_to_tag.end()) {
@@ -155,7 +167,7 @@ void System::tick(int clk) {
         } else if (top->m_axi_awlen+1 != 8) {
             cerr << "Write request with length != 8 (" << std::dec << top->m_axi_awlen << "+1)" << endl;
             Verilated::gotFinish(true);
-        } else if (w_addr > (ramsize - 64)) {
+        } else if (w_addr > (dram_offset + ramsize - 64)) {
             cerr << "Invalid 64-byte access, address " << std::hex << w_addr << " is beyond end of memory at " << ramsize << endl;
             Verilated::gotFinish(true);
         } else if (addr_to_tag.find(w_addr)!=addr_to_tag.end()) {
@@ -174,8 +186,7 @@ void System::tick(int clk) {
     if (top->m_axi_wvalid && w_count) {
         // if transfer is in progress, can't change mind about willAcceptTransaction()
         assert(willAcceptTransaction(w_addr));
-        //printf("write-back in offset: %d, data: %x\n", 8-w_count, top->m_axi_wdata);
-        *((uint64_t*)(&ram[w_addr + (8-w_count)*8])) = top->m_axi_wdata;
+        *((uint64_t*)(&ram[dram_offset + w_addr + (8-w_count)*8])) = top->m_axi_wdata;
         if(--w_count == 0) assert(top->m_axi_wlast);
     }
 
@@ -199,7 +210,7 @@ void System::dram_read_complete(unsigned id, uint64_t address, uint64_t clock_cy
     assert(tag != addr_to_tag.end());
     uint64_t orig_addr = tag->second.first;
     for(int i = 0; i < 64; i += 8)
-        r_queue.push_back(make_pair(*((uint64_t*)(&ram[((orig_addr&(~63))+((orig_addr+i)&63))])),make_pair(tag->second.second,i+8>=64)));
+        r_queue.push_back(make_pair(*((uint64_t*)(&ram[dram_offset + ((orig_addr&(~63))+((orig_addr+i)&63))])),make_pair(tag->second.second,i+8>=64)));
     addr_to_tag.erase(tag);
 }
 
@@ -214,8 +225,8 @@ void System::dram_write_complete(unsigned id, uint64_t address, uint64_t clock_c
 
 void System::set_errno(const int new_errno) {
     if (errno_addr) {
-        *errno_addr = new_errno;
-        invalidate((char*)errno_addr - ram);
+        ram[errno_addr] = new_errno;
+        invalidate(errno_addr);
     }
 }
 
@@ -288,21 +299,28 @@ uint64_t System::virt_to_phy(const uint64_t virt_addr) {
 
 void System::load_segment(const int fd, const size_t memsz, const size_t filesz, uint64_t virt_addr) {
     if (VM_DEBUG) cout << "Read " << std::dec << filesz << " bytes at " << std::hex << virt_addr << endl;
-    for(size_t i = 0; i < memsz; ++i) virt_to_phy(virt_addr + i); // prefault
+    for(size_t i = 0; i < memsz; ++i) assert(virt_to_phy(virt_addr + i)); // prefault
     assert(filesz == read(fd, &ram_virt[virt_addr], filesz));
 }
 
-uint64_t System::load_elf(const char* filename) {
+uint64_t System::load_binary(const char* filename) {
+
+    // open the elf file
+    int fd = open(filename, O_RDONLY);
+    assert(fd != -1);
+
+    if (full_system) {
+      off_t sz = lseek(fd, 0L, SEEK_END);
+      assert(sz == pread(fd, &ram[0], sz, 0));
+      close(fd);
+      return 0x80000000ULL;
+    }
 
     // check libelf version
     if (elf_version(EV_CURRENT) == EV_NONE) {
         cerr << "ELF binary out of date" << endl;
         exit(-1);
     }
-
-    // open the elf file
-    int fd = open(filename, O_RDONLY);
-    assert(fd != -1);
 
     // start reading the file
     Elf* elf = elf_begin(fd, ELF_C_READ, NULL);
@@ -361,7 +379,8 @@ uint64_t System::load_elf(const char* filename) {
                 break;
             }
             case PT_TLS:
-                errno_addr = (int*)(ram + phdr.p_vaddr + 0x20 /* errno, grep ".*TLS.* errno$" */);
+                errno_addr = virt_to_phy(phdr.p_vaddr+0x20/* errno, grep ".*TLS.* errno$" */);
+                assert(errno_addr);
                 cout << "Setting errno_addr to " << std::hex << errno_addr << " (TLS at " << phdr.p_vaddr << "+0x20)" << endl;
                 break;
             case PT_DYNAMIC:

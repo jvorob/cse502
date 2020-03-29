@@ -19,31 +19,33 @@ double sc_time_stamp() {
 int main(int argc, char* argv[]) {
 	Verilated::commandArgs(argc, argv);
 
-	const char* ramelf = NULL;
-	if (argc > 0) ramelf = argv[1];
+	const char* binaryfn = NULL;
+	if (argc > 0) binaryfn = argv[1];
 
 	Vtop top;
-	System sys(&top, RAM_SIZE, ramelf, argc-1, argv+1, 500);
+	System sys(&top, RAM_SIZE, binaryfn, argc-1, argv+1, 500);
 
-	// (argc, argv) sanity check
-	cerr << "===== Printing arguments of the program..." << endl;
-	for (int j = 0; j <= argc-1; j++) {
-		unsigned long guest_addr = top.stackptr + j * sizeof(uint64_t);
-		uint64_t val = *(uint64_t *)(sys.ram_virt + guest_addr);
+  if (!sys.full_system) {
+    // (argc, argv) sanity check
+    cerr << "===== Printing arguments of the program..." << endl;
+    for (int j = 0; j <= argc-1; j++) {
+      unsigned long guest_addr = top.stackptr + j * sizeof(uint64_t);
+      uint64_t val = *(uint64_t *)(sys.ram_virt + guest_addr);
 
-		if (0 == j) {
-			cerr << dec << "== argc: " << val << endl;
-		} else {
-			char *arg_ptr = sys.ram_virt + val;
-			char *arg_ptr1 = arg_ptr;
-			while (*arg_ptr++);
-			unsigned len = arg_ptr - arg_ptr1;
-			cerr << dec << "== argv[" << j-1 << "]: ";
-			do_ecall(1/*__NR_write*/, 2, val, len-1, 0, 0, 0, 0, (long long*)&arg_ptr/*dummy*/);
-			cerr << endl;
-		}
-	}
-	cerr << "==========================================" << endl;
+      if (0 == j) {
+        cerr << dec << "== argc: " << val << endl;
+      } else {
+        char *arg_ptr = sys.ram_virt + val;
+        char *arg_ptr1 = arg_ptr;
+        while (*arg_ptr++);
+        unsigned len = arg_ptr - arg_ptr1;
+        cerr << dec << "== argv[" << j-1 << "]: ";
+        do_ecall(1/*__NR_write*/, 2, val, len-1, 0, 0, 0, 0, (long long*)&arg_ptr/*dummy*/);
+        cerr << endl;
+      }
+    }
+    cerr << "==========================================" << endl;
+  }
 
 #if VM_TRACE
 	// If verilator was invoked with --trace
