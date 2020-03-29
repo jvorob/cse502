@@ -65,7 +65,6 @@ module Dtlb
 
     assign index = va[LOG_SETS-1+VPN_LOWER:VPN_LOWER];
 
-
     logic [1:0] state;
 
     assign pa = { {EXTENDED_PPN-OFFSET_BITS-PPN_BITS{1'b0}}, tlb_pas[index][0], {OFFSET_BITS{1'b0}} };
@@ -92,17 +91,15 @@ module Dtlb
                 if (!pa_valid) begin
                     // translation not found or not valid.
                     state <= 1;
+
+                    // retrieve the translation from mmu
+                    requested_va <= va;
+                    req_addr <= va;
+                    req_valid <= 1;
                 end
             end
         end
         else if (state == 1) begin
-            // retrieve the translation from mmu
-            requested_va <= va;
-            req_addr <= va;
-            req_valid <= 1;
-            state <= 2;
-        end
-       else if (state == 2) begin
             if (resp_valid) begin
                tlb_vas[rplc_index][0] <= requested_va[VPN_UPPER:VPN_LOWER];
                tlb_pas[rplc_index][0] <= resp_addr[PPN_UPPER:PPN_LOWER];
