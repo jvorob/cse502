@@ -22,7 +22,7 @@ using namespace std;
 System* System::sys;
 
 System::System(Vtop* top, uint64_t ramsize, const char* binaryfn, const int argc, char* argv[], int ps_per_clock)
-    : top(top), ps_per_clock(ps_per_clock), ramsize(ramsize), dram_offset(0), max_elf_addr(0), show_console(false), interrupts(0), w_count(0), ticks(0), ecall_brk(0), errno_addr(NULL)
+    : top(top), ps_per_clock(ps_per_clock), ramsize(ramsize), dram_offset(0), max_elf_addr(0), show_console(false), interrupts(0), w_count(0), ticks(0), ecall_brk(0), errno_addr(0ULL)
 {
     sys = this;
 
@@ -44,8 +44,9 @@ System::System(Vtop* top, uint64_t ramsize, const char* binaryfn, const int argc
     if (use_virtual_memory) {
       ram_virt = (char*)mmap(NULL, ramsize, PROT_NONE, MAP_ANONYMOUS|MAP_PRIVATE, -1, 0);
       assert(ram_virt != MAP_FAILED);
-    } else if (full_system) {
-      dram_offset = -DRAM_OFFSET;
+    } else {
+      ram_virt = ram;
+      if (full_system) dram_offset = -DRAM_OFFSET;
     }
 
     // load the program image
@@ -221,8 +222,8 @@ void System::dram_write_complete(unsigned id, uint64_t address, uint64_t clock_c
 
 void System::set_errno(const int new_errno) {
     if (errno_addr) {
-        *errno_addr = new_errno;
-        invalidate((char*)errno_addr - ram);
+        ram[errno_addr] = new_errno;
+        invalidate(errno_addr);
     }
 }
 
@@ -374,7 +375,8 @@ uint64_t System::load_binary(const char* filename) {
                 break;
             }
             case PT_TLS:
-                errno_addr = (int*)(ram + phdr.p_vaddr + 0x20 /* errno, grep ".*TLS.* errno$" */);
+                errno_addr = virt_to_phy(phdr.p_vaddr+0x20/* errno, grep ".*TLS.* errno$" */);
+                assert(errno_addr);
                 cout << "Setting errno_addr to " << std::hex << errno_addr << " (TLS at " << phdr.p_vaddr << "+0x20)" << endl;
                 break;
             case PT_DYNAMIC:

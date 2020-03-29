@@ -35,7 +35,7 @@ class System {
     enum { IRQ_TIMER=0, IRQ_KBD=1 };
     int interrupts;
     std::queue<char> keys;
-    int* errno_addr;
+    uint64_t errno_addr;
 
     bool show_console;
 
