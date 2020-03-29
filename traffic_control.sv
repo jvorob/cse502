@@ -6,6 +6,11 @@ module traffic_control(
     input mem_stall,
     input wb_stall,
 
+    input id_valid,
+    input ex_valid,
+    input mem_valid,
+    input wb_valid,
+
     // Flush all instructions in the pipeline behind the WB stage
     input flush_before_wb,
 	input flush_before_ex,
@@ -23,14 +28,18 @@ module traffic_control(
     output wb_wr_en
 );
     always_comb begin
-        wb_wr_en = (wb_stall == 0);
-        mem_wr_en = (wb_wr_en == 1) && (mem_stall == 0);
-        ex_wr_en = (mem_wr_en == 1) && (ex_stall == 0);
-        id_wr_en = (ex_wr_en == 1) && (id_stall == 0);
+        //If a register is empty (a bubble), it should always have wr_en==1
+        //If nonempty, then it can be written to if:
+        //- its current instruction is done (!stall)
+        //- AND the current instruction has room to advance (next_reg.wr_en == 1)
+        wb_wr_en  = !wb_valid  || !wb_stall;
+        mem_wr_en = !mem_valid || (!mem_stall && wb_wr_en);
+        ex_wr_en  = !ex_valid  || (!ex_stall  && mem_wr_en);
+        id_wr_en  = !id_valid  || (!id_stall  && ex_wr_en);
 
-        // IF can advance either through normal pipeline
+        // IF can advance either through normal pipeline (!stall && next_wr_en)
         // or in case of a jump/pipeline-flush
-        if_wr_en = ((id_wr_en == 1) && (if_stall == 0)) ||
+        if_wr_en = (!if_stall && id_wr_en) ||
                    (flush_before_wb || flush_before_ex); //in this case, IF_next_pc will also be changed
 
         wb_gen_bubble = mem_stall;

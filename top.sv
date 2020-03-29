@@ -470,11 +470,17 @@ module top
         .mem_stall(haz_mem_stall),
         .wb_stall(haz_wb_stall),
 
+        // Whether that reg is actuall holding anything at the moment
+        .id_valid (ID_reg.valid),
+        .ex_valid (EX_reg.valid),
+        .mem_valid(MEM_reg.valid),
+        .wb_valid (WB_reg.valid),
+
         .flush_before_wb(flush_before_wb),
 		.flush_before_ex(flush_before_ex),
 
         // Output gen bubbles
-        // IF will never get a bubble, we always have some intruction we're trying to fetch
+        // IF should never get a bubble, we always have some intruction we're trying to fetch
         .id_gen_bubble(id_gen_bubble),
         .ex_gen_bubble(ex_gen_bubble),
         .mem_gen_bubble(mem_gen_bubble),
