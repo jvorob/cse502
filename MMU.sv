@@ -160,7 +160,7 @@ module MMU
                     if (dcache_resp_valid) begin
 
                         // === Error checking
-                        if (!dcache_resp_v && curr_level != 3) //check pte valid bit (TEMP: skip this for root)
+                        if (!dcache_resp_v) //check pte valid bit
                             $error("Error, invalid PTE at %x", curr_pt_addr);
                         if (dcache_resp_w && !dcache_resp_r)
                             $error("Error, PTE has write && !read at %x", curr_pt_addr);
