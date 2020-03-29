@@ -69,6 +69,7 @@ module Dtlb
     logic [1:0] state;
 
     assign pa = { {EXTENDED_PPN-OFFSET_BITS-PPN_BITS{1'b0}}, tlb_pas[index][0], {OFFSET_BITS{1'b0}} };
+    assign pa_valid = va_valid && (tlb_vas[index][0] == va[VPN_UPPER:VPN_LOWER]) && valid_entry[index][0] == 1;
     assign pte_perm = perms[index][0];
 
     always_ff @(posedge clk) begin
@@ -80,8 +81,6 @@ module Dtlb
             
             state <= 0;
 
-            pa_valid <= 0;
-
             req_addr <= 0;
             req_valid <= 0;
 
@@ -89,14 +88,8 @@ module Dtlb
         end
         else if (state == 0) begin
             // wait for request
-            pa_valid <= 0;
             if (va_valid) begin
-                if (tlb_vas[index][0] == va[VPN_UPPER:VPN_LOWER] && valid_entry[index][0] == 1) begin
-                    // found translation. output it.
-                    state <= 3;
-                    pa_valid <= 1;
-                end
-                else begin
+                if (!pa_valid) begin
                     // translation not found or not valid.
                     state <= 1;
                 end
@@ -118,12 +111,6 @@ module Dtlb
                req_valid <= 0;
                state <= 0;
             end
-        end
-        else if (state == 3) begin
-            // This state is just meant to give the pipeline a cycle to deassert va_valid (the valid request signal) to this module.
-            // Otherwise this module would return to cycle 0 and begin output a 2nd cycle for the same request.
-            pa_valid <= 0;
-            state <= 0;
         end
     end
 endmodule
