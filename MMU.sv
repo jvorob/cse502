@@ -76,12 +76,14 @@ module MMU
     // === Aliases / intermediate signals
     
     logic [11:0]     translate_addr_offset;
+    logic [35:0]     translate_addr_pagenum;
     logic [3:0][8:0] translate_addr_vpn;
-    assign translate_addr_offset = translate_addr[11: 0];
-    assign translate_addr_vpn[0] = translate_addr[20:12];
-    assign translate_addr_vpn[1] = translate_addr[29:21];
-    assign translate_addr_vpn[2] = translate_addr[38:30];
-    assign translate_addr_vpn[3] = translate_addr[47:39];
+    assign translate_addr_pagenum = translate_addr[47:12]; //For debug tracing
+    assign translate_addr_offset  = translate_addr[11: 0];
+    assign translate_addr_vpn[0]  = translate_addr[20:12];
+    assign translate_addr_vpn[1]  = translate_addr[29:21];
+    assign translate_addr_vpn[2]  = translate_addr[38:30];
+    assign translate_addr_vpn[3]  = translate_addr[47:39];
 
     logic [8:0] curr_vpn;
     assign curr_vpn = translate_addr_vpn[curr_level];
