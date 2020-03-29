@@ -29,8 +29,8 @@ module ID_reg(
     
     // Traffic Signals
     input wr_en,    // allows reg to clock-in results from prev stage
-    input gen_bubble,   // clears reg, priority over input_en
-    output bubble, // is 0 for normal ops, 1 for bubbles
+    input gen_bubble,   // clears reg, (if wr_en is high)
+    output valid, //  is 1 for normal ops, 0 for bubbles
 
     // Data signals coming in from IF
     input [63:0] next_pc,
@@ -42,18 +42,18 @@ module ID_reg(
 );
     always_ff @(posedge clk) begin
         if (reset == 1) begin
-            bubble <= 1;
+            valid <= 0;
             curr_pc    <= 0;
             curr_inst  <= 0;
         end
         else if (wr_en == 1) begin
             if (gen_bubble) begin
-                bubble <= 1;
+                valid <= 0;
                 curr_pc <= 0;
                 curr_inst <= 0;
             end
             else begin
-                bubble <= 0;
+                valid <= 1;
                 curr_pc <= next_pc;
                 curr_inst <= next_inst;
             end
@@ -70,8 +70,8 @@ module EX_reg(
     
     // Traffic Signals
     input wr_en,    // allows reg to clock-in results from prev stage
-    input gen_bubble,   // clears reg, priority over input_en
-    output bubble, // is 0 for normal ops, 1 for bubbles
+    input gen_bubble,   // clears reg, (if wr_en is high)
+    output valid, //  is 1 for normal ops, 0 for bubbles
     
     // Data signals coming in from ID (decode/regfile)
     input [63:0] next_pc,
@@ -87,8 +87,8 @@ module EX_reg(
     output [63:0]         curr_val_rs2
 );
     always_ff @(posedge clk) begin
-        if (reset == 1) begin
-            bubble       <= 1;
+        if (reset) begin
+            valid        <= 0;
             curr_pc      <= 0;
             curr_deco    <= 0;
             curr_val_rs1 <= 0;
@@ -96,14 +96,14 @@ module EX_reg(
         end
         else if (wr_en == 1) begin
             if (gen_bubble) begin
-                bubble <= 1;
+                valid  <= 0;
                 curr_pc <= 0;
                 curr_deco <= 0;
                 curr_val_rs1 <= 0;
                 curr_val_rs2 <= 0;
             end
             else begin
-                bubble <= 0;
+                valid <= 1;
                 curr_pc      <= next_pc;
                 curr_deco    <= next_deco;
                 curr_val_rs1 <= next_val_rs1;
@@ -122,8 +122,8 @@ module MEM_reg(
     
     // Traffic Signals
     input wr_en,    // allows reg to clock-in results from prev stage
-    input gen_bubble,   // clears reg, priority over input_en
-    output bubble, // is 0 for normal ops, 1 for bubbles
+    input gen_bubble,   // clears reg, (if wr_en is high)
+    output valid, //  is 1 for normal ops, 0 for bubbles
 
     // Data signals coming in from EX
     input [63:0] next_pc,
@@ -139,7 +139,7 @@ module MEM_reg(
 );
     always_ff @(posedge clk) begin
         if (reset == 1) begin
-            bubble       <= 1;
+            valid        <= 0;
             curr_pc      <= 0;
             curr_deco    <= 0;
             curr_data    <= 0;
@@ -147,14 +147,14 @@ module MEM_reg(
         end
         else if (wr_en == 1) begin
             if (gen_bubble) begin
-                bubble <= 1;
+                valid <= 0;
                 curr_pc <= 0;
                 curr_deco <= 0;
                 curr_data <= 0;
                 curr_data2 <= 0;
             end
             else begin
-                bubble <= 0;
+                valid <= 1;
                 curr_pc      <= next_pc;
                 curr_deco    <= next_deco;
                 curr_data    <= next_data;
@@ -173,8 +173,8 @@ module WB_reg(
 
     // Traffic Signals
     input wr_en,    // allows reg to clock-in results from prev stage
-    input gen_bubble,   // clears reg, priority over input_en
-    output bubble, // is 0 for normal ops, 1 for bubbles
+    input gen_bubble,   // clears reg, (if wr_en is high)
+    output valid, //  is 1 for normal ops, 0 for bubbles
 
     // Data signals coming in from MEM
     input [63:0] next_pc,
@@ -190,7 +190,7 @@ module WB_reg(
 );
     always_ff @(posedge clk) begin
         if (reset == 1) begin
-            bubble          <= 1;
+            valid           <= 0;
             curr_pc         <= 0;
             curr_deco       <= 0;
             curr_alu_result <= 0;
@@ -198,14 +198,14 @@ module WB_reg(
         end
         else if (wr_en == 1) begin
             if (gen_bubble) begin
-                bubble <= 1;
+                valid <= 0;
                 curr_pc <= 0;
                 curr_deco <= 0;
                 curr_alu_result <= 0;
                 curr_mem_result <= 0;
             end
             else begin
-                bubble          <= 0;
+                valid           <= 1;
                 curr_pc         <= next_pc;
                 curr_deco       <= next_deco;
                 curr_alu_result <= next_alu_result;

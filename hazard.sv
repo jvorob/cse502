@@ -1,27 +1,29 @@
 // This file holds the hazard detection unit.
+//
+// Looks at nonlocal interactions between pipeline stages
+// (i.e. data dependencies spanning several stages)
+// Notifies of data hazard, enables forwarding paths
+// 
+// TODO: all of the aforementioned. At the moment, it just outputs
+// stall signals for everything, which could easily be done locally
 
 module hazard_unit(
-    // signals from IF/ID Reg
     input decoded_inst_t ID_deco,
-    input id_bubble,
-
-    // signals from ID/EX Reg
     input decoded_inst_t EX_deco,
-    input ex_bubble,
-
-    // signals from EX/MEM Reg
     input decoded_inst_t MEM_deco,
-    input mem_bubble,
+    input decoded_inst_t WB_deco,
 
-	// signals from d-cache
+    input id_valid,
+    input ex_valid,
+    input mem_valid,
+    input wb_valid,
+
+	// signals from mem_stage
 	input dcache_valid,
 	input write_done,
 	input dcache_enable,
 
-    // signals from MEM/WB Reg
-    input decoded_inst_t WB_deco,
-    input wb_bubble,
-
+    // signals from WB stage
 	input ecall_stall,
     input wb_is_ecall,
     output flush_before_wb,
@@ -66,17 +68,17 @@ module hazard_unit(
     assign wb_en_rd = WB_deco.en_rd;
 
     always_comb begin
-        if (id_bubble) begin
+        if (!id_valid) begin
             id_stall = 0;
         end
         else begin
-            if ( !wb_bubble && wb_en_rd && ((wb_rd == id_rs1 && id_en_rs1) || (wb_rd == id_rs2 && id_en_rs2)) ) begin 
+            if ( wb_valid && wb_en_rd && ((wb_rd == id_rs1 && id_en_rs1) || (wb_rd == id_rs2 && id_en_rs2)) ) begin 
                 id_stall = 1;
             end
-            else if ( !mem_bubble && mem_en_rd && ((mem_rd == id_rs1 && id_en_rs1) || (mem_rd == id_rs2 && id_en_rs2)) ) begin
+            else if ( mem_valid && mem_en_rd && ((mem_rd == id_rs1 && id_en_rs1) || (mem_rd == id_rs2 && id_en_rs2)) ) begin
                 id_stall = 1;
             end
-            else if ( !ex_bubble && ex_en_rd && ((ex_rd == id_rs1 && id_en_rs1) || (ex_rd == id_rs2 && id_en_rs2)) ) begin
+            else if ( ex_valid && ex_en_rd && ((ex_rd == id_rs1 && id_en_rs1) || (ex_rd == id_rs2 && id_en_rs2)) ) begin
                 id_stall = 1;
             end
             else begin

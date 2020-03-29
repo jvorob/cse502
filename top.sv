@@ -116,7 +116,7 @@ module top
         else if (if_wr_en) begin
             // (ECALL: re-execute flushed instructions
             if (flush_before_wb) begin 
-                if(WB_reg.bubble) $error("ERROR: flush_before_wb expects ECALL inst in WB, found bubble");
+                if(!WB_reg.valid) $error("ERROR: flush_before_wb expects ECALL inst in WB, found bubble");
 
                 // start after ECALL which is in WB (TODO: will be in WB?)
                 IF_pc <= WB_reg.curr_pc + 4;
@@ -124,7 +124,7 @@ module top
 
             // (JUMP: change pc to jump_target)
             else if (flush_before_ex) begin 
-                if(EX_reg.bubble) $error("ERROR: flush_before_ex expects inst in EX, found bubble");
+                if(!EX_reg.valid) $error("ERROR: flush_before_ex expects inst in EX, found bubble");
 
                 if (do_jump) 
                     IF_pc <= jump_target_address;
@@ -154,7 +154,7 @@ module top
         //traffic signals
         .wr_en(id_wr_en),
         .gen_bubble(id_gen_bubble),
-        .bubble(),
+        .valid(),
 
         // incoming signals for next step's ID
         .next_pc(IF_pc),
@@ -188,7 +188,7 @@ module top
 	logic [63:0] WB_result;
 	logic [4:0] WB_rd;
 	logic WB_en_rd;
-    assign writeback_en = !WB_reg.bubble && !haz_wb_stall && WB_en_rd; 
+    assign writeback_en = WB_reg.valid && !haz_wb_stall && WB_en_rd; 
     // only wb on a valid instruction, not stalled (i.e. completed)
     // and which actually has something to writeback (en_rd)
 
@@ -222,8 +222,8 @@ module top
 
         //traffic signals
         .wr_en(ex_wr_en),
-        .gen_bubble(ID_reg.bubble || ex_gen_bubble),
-        .bubble(),
+        .gen_bubble(!ID_reg.valid || ex_gen_bubble),
+        .valid(),
 
         // Data coming in from ID + RF stage
         .next_pc(ID_reg.curr_pc),
@@ -322,8 +322,8 @@ module top
         
         //traffic signals
         .wr_en(mem_wr_en),
-        .gen_bubble(EX_reg.bubble || mem_gen_bubble),
-        .bubble(),
+        .gen_bubble(!EX_reg.valid || mem_gen_bubble),
+        .valid(),
 
         // Data coming in from EX
         .next_pc(EX_reg.curr_pc),
@@ -354,7 +354,7 @@ module top
         .inst(MEM_reg.curr_deco),
         .ex_data(MEM_reg.curr_data),
         .ex_data2(MEM_reg.curr_data2),
-        .is_bubble(MEM_reg.bubble),
+        .is_bubble(!MEM_reg.valid),
         .dcache_valid(dcache_valid),
         .write_done(write_done),
         .dcache_en(dcache_en),
@@ -379,8 +379,8 @@ module top
 
         //traffic signals
         .wr_en(wb_wr_en),
-        .gen_bubble(MEM_reg.bubble || wb_gen_bubble),
-        .bubble(),
+        .gen_bubble(!MEM_reg.valid || wb_gen_bubble),
+        .valid(),
 
         // Data signals coming in from MEM
         .next_pc(MEM_reg.curr_pc),
@@ -412,7 +412,7 @@ module top
 		.a6(a6),
 		.a7(a7),
 		
-		.is_bubble(WB_reg.bubble),
+		.is_bubble(!WB_reg.valid),
 
 		.alu_result(WB_reg.curr_alu_result),
 		.mem_result(WB_reg.curr_mem_result),
@@ -436,21 +436,21 @@ module top
     
     hazard_unit haz(
         .ID_deco(ID_deco),
-        .id_bubble(ID_reg.bubble),
-
         .EX_deco(EX_deco),
-        .ex_bubble(EX_reg.bubble),
-
         .MEM_deco(MEM_reg.curr_deco),
-        .mem_bubble(MEM_reg.bubble),
-		
+        .WB_deco(WB_reg.curr_deco),
+
+        .id_valid (ID_reg.valid),
+        .ex_valid (EX_reg.valid),
+        .mem_valid(MEM_reg.valid),
+        .wb_valid (WB_reg.valid),
+
+        //Mem signals (TODO: refactor these away)
 		.dcache_valid(dcache_valid),
 		.write_done(write_done),
 		.dcache_enable(dcache_en),
 
-        .WB_deco(WB_reg.curr_deco),
-        .wb_bubble(WB_reg.bubble),
-
+        // WB signals (TODO refactor these away)
 		.ecall_stall(ecall_stall),
         .wb_is_ecall(WB_reg.curr_deco.is_ecall),
         .flush_before_wb(flush_before_wb),
