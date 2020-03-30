@@ -49,9 +49,6 @@ System::System(Vtop* top, uint64_t ramsize, const char* binaryfn, const int argc
       if (full_system) dram_offset = -DRAM_OFFSET;
     }
 
-    // load the program image
-    if (binaryfn) top->entry = load_binary(binaryfn);
-
     if (!full_system) {
       ecall_brk = max_elf_addr;
 
@@ -75,6 +72,9 @@ System::System(Vtop* top, uint64_t ramsize, const char* binaryfn, const int argc
       }
       virt_to_phy(0); // TODO: must initialize auxv vector with AT_RANDOM value.  until then, _dl_random will be a null pointer, so need to prefault address 0
     }
+
+    // load the program image
+    if (binaryfn) top->entry = load_binary(binaryfn);
 
     // create the dram simulator
     dramsim = DRAMSim::getMemorySystemInstance("DDR2_micron_16M_8b_x8_sg3E.ini", "system.ini", "../dramsim2", "dram_result", ramsize / MEGA);
