@@ -184,7 +184,7 @@ void System::tick(int clk) {
     if (top->m_axi_wvalid && w_count) {
         // if transfer is in progress, can't change mind about willAcceptTransaction()
         assert(willAcceptTransaction(w_addr));
-        *((uint64_t*)(&ram[w_addr + (8-w_count)*8])) = top->m_axi_wdata;
+        *((uint64_t*)(&ram[w_addr - DRAM_OFFSET + (8-w_count)*8])) = top->m_axi_wdata;
         if(--w_count == 0) assert(top->m_axi_wlast);
     }
 
@@ -207,7 +207,7 @@ void System::dram_read_complete(unsigned id, uint64_t address, uint64_t clock_cy
     assert(tag != addr_to_tag.end());
     uint64_t orig_addr = tag->second.first;
     for(int i = 0; i < 64; i += 8)
-        r_queue.push_back(make_pair(*((uint64_t*)(&ram[((orig_addr&(~63))+((orig_addr+i)&63))])),make_pair(tag->second.second,i+8>=64)));
+        r_queue.push_back(make_pair(*((uint64_t*)(&ram[((orig_addr&(~63))+((orig_addr+i)&63)) - DRAM_OFFSET])),make_pair(tag->second.second,i+8>=64)));
     addr_to_tag.erase(tag);
 }
 
@@ -309,7 +309,7 @@ uint64_t System::load_binary(const char* filename) {
       off_t sz = lseek(fd, 0L, SEEK_END);
       assert(sz == pread(fd, &ram[0], sz, 0));
       close(fd);
-      return 0x80000000ULL;
+      return DRAM_OFFSET;
     }
 
     // check libelf version
