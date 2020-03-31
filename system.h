@@ -65,7 +65,7 @@ class System {
     
 public:
     static System* sys;
-    uint64_t max_elf_addr;
+    uint64_t max_elf_addr, dram_offset;
     uint64_t ecall_brk;
 
     uint64_t ticks;
@@ -78,7 +78,7 @@ public:
     uint64_t virt_to_phy(const uint64_t virt_addr);
 
     char* ram;
-    uint64_t ramsize, dram_offset;
+    uint64_t ramsize;
     char* ram_virt;
     int ram_fd;
 
