@@ -65,7 +65,7 @@ class System {
     
 public:
     static System* sys;
-    uint64_t max_elf_addr;
+    uint64_t max_elf_addr, dram_offset;
     uint64_t ecall_brk;
 
     uint64_t ticks;
