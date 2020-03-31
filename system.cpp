@@ -22,7 +22,7 @@ using namespace std;
 System* System::sys;
 
 System::System(Vtop* top, uint64_t ramsize, const char* binaryfn, const int argc, char* argv[], int ps_per_clock)
-    : top(top), ps_per_clock(ps_per_clock), ramsize(ramsize), dram_offset(0), max_elf_addr(0), show_console(false), interrupts(0), w_count(0), ticks(0), ecall_brk(0), errno_addr(0ULL)
+    : top(top), ps_per_clock(ps_per_clock), ramsize(ramsize), max_elf_addr(0), dram_offset(0), show_console(false), interrupts(0), w_count(0), ticks(0), ecall_brk(0), errno_addr(0ULL)
 {
     sys = this;
 
@@ -46,7 +46,7 @@ System::System(Vtop* top, uint64_t ramsize, const char* binaryfn, const int argc
       assert(ram_virt != MAP_FAILED);
     } else {
       ram_virt = ram;
-      if (full_system) dram_offset = -DRAM_OFFSET;
+      if (full_system) dram_offset = DRAM_OFFSET;
     }
 
     if (!full_system) {
@@ -128,24 +128,25 @@ void System::tick(int clk) {
     dramsim->update();    
 
     if (top->m_axi_arvalid) {
-        uint64_t xfer_addr = top->m_axi_araddr & ~0x3fULL;
+        uint64_t r_addr = top->m_axi_araddr & ~0x3fULL;
+
         if (top->m_axi_arburst != 2) {
             cerr << "Read request with non-wrap burst (" << std::dec << top->m_axi_arburst << ") unsupported" << endl;
             Verilated::gotFinish(true);
         } else if (top->m_axi_arlen+1 != 8) {
               cerr << "Read request with length != 8 (" << std::dec << top->m_axi_arlen << "+1)" << endl;
               Verilated::gotFinish(true);
-        } else if (xfer_addr > (dram_offset + ramsize - 64)) {
-            cerr << "Invalid 64-byte access, address " << std::hex << xfer_addr << " is beyond end of memory at " << ramsize << endl;
+        } else if (r_addr > (dram_offset + ramsize - 64)) {
+            cerr << "Invalid 64-byte access, address " << std::hex << r_addr << " is beyond end of memory at " << ramsize << endl;
             Verilated::gotFinish(true);
-        } else if (addr_to_tag.find(xfer_addr)!=addr_to_tag.end()) {
-            cerr << "Access for " << std::hex << xfer_addr << " already outstanding.  Ignoring..." << endl;
+        } else if (addr_to_tag.find(r_addr)!=addr_to_tag.end()) {
+            cerr << "Access for " << std::hex << r_addr << " already outstanding.  Ignoring..." << endl;
         } else {
-            assert(willAcceptTransaction(xfer_addr)); // if this gets triggered, need to rethink AXI "ready" signal strategy
+            assert(willAcceptTransaction(r_addr)); // if this gets triggered, need to rethink AXI "ready" signal strategy
             assert(
-                    dramsim->addTransaction(false, xfer_addr)
+                    dramsim->addTransaction(false, r_addr - dram_offset)
                   );
-            addr_to_tag[xfer_addr] = make_pair(top->m_axi_araddr, top->m_axi_arid);
+            addr_to_tag[r_addr] = make_pair(top->m_axi_araddr, top->m_axi_arid);
         }
     }
 
@@ -175,7 +176,7 @@ void System::tick(int clk) {
             //printf("write transaction is triggered\n");
             assert(willAcceptTransaction(w_addr)); // if this gets triggered, need to rethink AXI "ready" signal strategy
             assert(
-                    dramsim->addTransaction(true, w_addr)
+                    dramsim->addTransaction(true, w_addr - dram_offset)
                   );
             addr_to_tag[w_addr] = make_pair(top->m_axi_awaddr, top->m_axi_awid);
         }
@@ -185,7 +186,7 @@ void System::tick(int clk) {
     if (top->m_axi_wvalid && w_count) {
         // if transfer is in progress, can't change mind about willAcceptTransaction()
         assert(willAcceptTransaction(w_addr));
-        *((uint64_t*)(&ram[dram_offset + w_addr + (8-w_count)*8])) = top->m_axi_wdata;
+        *((uint64_t*)(&ram[w_addr - dram_offset + (8-w_count)*8])) = top->m_axi_wdata;
         if(--w_count == 0) assert(top->m_axi_wlast);
     }
 
@@ -204,19 +205,18 @@ void System::tick(int clk) {
 }
 
 void System::dram_read_complete(unsigned id, uint64_t address, uint64_t clock_cycle) {
-    //printf("dram read complete for addr: %x\n", address);
-    map<uint64_t, pair<uint64_t, int> >::iterator tag = addr_to_tag.find(address);
+    map<uint64_t, pair<uint64_t, int> >::iterator tag = addr_to_tag.find(address + dram_offset);
     assert(tag != addr_to_tag.end());
     uint64_t orig_addr = tag->second.first;
     for(int i = 0; i < 64; i += 8)
-        r_queue.push_back(make_pair(*((uint64_t*)(&ram[dram_offset + ((orig_addr&(~63))+((orig_addr+i)&63))])),make_pair(tag->second.second,i+8>=64)));
+        r_queue.push_back(make_pair(*((uint64_t*)(&ram[((orig_addr&(~63))+((orig_addr+i)&63)) - dram_offset])),make_pair(tag->second.second,i+8>=64)));
     addr_to_tag.erase(tag);
 }
 
 void System::dram_write_complete(unsigned id, uint64_t address, uint64_t clock_cycle) {
     //printf("dram write complete for addr: %x\n", address);
     do_finish_write(address, 64);
-    map<uint64_t, pair<uint64_t, int> >::iterator tag = addr_to_tag.find(address);
+    map<uint64_t, pair<uint64_t, int> >::iterator tag = addr_to_tag.find(address + dram_offset);
     assert(tag != addr_to_tag.end());
     resp_queue.push_back(tag->second.second);
     addr_to_tag.erase(tag);
@@ -312,7 +312,7 @@ uint64_t System::load_binary(const char* filename) {
       off_t sz = lseek(fd, 0L, SEEK_END);
       assert(sz == pread(fd, &ram[0], sz, 0));
       close(fd);
-      return 0x80000000ULL;
+      return dram_offset;
     }
 
     // check libelf version
