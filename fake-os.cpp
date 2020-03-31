@@ -61,7 +61,8 @@ extern "C" {
             assert(a0 == 0 && (a3 & MAP_ANONYMOUS)); // only support ANONYMOUS mmap with NULL argument
             System::sys->ecall_brk = (System::sys->ecall_brk + PAGE_SIZE-1) & ~(PAGE_SIZE-1); // align to 4K boundary
             *a0ret = System::sys->ecall_brk;
-            for(long long addr = System::sys->ecall_brk; addr < System::sys->ecall_brk+a1; ++addr) System::sys->virt_to_phy(addr); // prefault
+            for(long long addr = System::sys->ecall_brk; addr < System::sys->ecall_brk+a1; addr += PAGE_SIZE) System::sys->virt_to_phy(addr); // prefault
+            System::sys->virt_to_phy(System::sys->ecall_brk+a1-1); // prefault
             System::sys->ecall_brk += a1;
             System::sys->ecall_brk = (System::sys->ecall_brk + PAGE_SIZE-1) & ~(PAGE_SIZE-1); // align to 4K boundary
             return;
