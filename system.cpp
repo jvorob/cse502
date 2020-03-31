@@ -50,8 +50,6 @@ System::System(Vtop* top, uint64_t ramsize, const char* binaryfn, const int argc
     }
 
     if (!full_system) {
-      ecall_brk = max_elf_addr;
-
       top->satp = get_phys_page() << 12;
       top->stackptr = ramsize - 4*MEGA;
       for(int n = 1; n < STACK_PAGES; ++n) virt_to_phy(top->stackptr - PAGE_SIZE*n); // allocate stack pages
@@ -75,6 +73,7 @@ System::System(Vtop* top, uint64_t ramsize, const char* binaryfn, const int argc
 
     // load the program image
     if (binaryfn) top->entry = load_binary(binaryfn);
+    ecall_brk = max_elf_addr;
 
     // create the dram simulator
     dramsim = DRAMSim::getMemorySystemInstance("DDR2_micron_16M_8b_x8_sg3E.ini", "system.ini", "../dramsim2", "dram_result", ramsize / MEGA);
