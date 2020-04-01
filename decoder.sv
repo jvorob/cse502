@@ -51,6 +51,7 @@ typedef struct packed {
 module Decoder
 (
     input [31:0] inst,
+    input valid,
     output decoded_inst_t out
 );
 
@@ -263,15 +264,23 @@ module Decoder
                         end
                         else if (immed_I[0] == 1) begin
                             // ebreak
-                            // $display("ebreak");
+                            $display("ebreak");
 						end
                         else begin
-                            // $display("Invalid instruction for opcode=OP_SYSTEM and funct3=F3_ECALL_EBREAK.");
+                            $display("Invalid instruction for opcode=OP_SYSTEM and funct3=F3_ECALL_EBREAK.");
                         end
 					end
+                    default: begin
+                        $display("Invalid instruction for opcode=OP_SYSTEM. funct3 = %x.", funct3);
+                    end
                 endcase
             end
-            // Technically, we want a default case to avoid inferred latches
+            0: begin
+                if (valid) $display("opcode = 0");
+            end
+            default: begin
+                if (valid) $display("Did not recognize opcode category.");
+            end
         endcase
     end
 

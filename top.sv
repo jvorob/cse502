@@ -109,6 +109,7 @@ module top
     // IF-stage PC logic
     always_ff @ (posedge clk) begin
         if (reset) begin
+            $display("satp: %x", satp);
             $display("Entry: %x", entry);
             IF_pc <= entry;
         end 
@@ -172,7 +173,7 @@ module top
 
     Decoder d(
         .inst(ID_reg.curr_inst),
-
+        .valid(ID_reg.valid),
         .out(ID_deco)
     );
     
@@ -500,7 +501,7 @@ module top
         .clk,
         .reset,
         .satp,    //TODO: for now is value from HAVETLB, later will be from CSR
-        .virtual_en(1),  //leave virtual memory disabled for now
+        .virtual_en(0),  //leave virtual memory disabled for now
 
         //I$ ports
         .ic_req_addr(mem_sys_ic_req_addr),  // this is assigned from a signal since it's an input
