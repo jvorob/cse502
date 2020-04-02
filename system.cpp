@@ -136,6 +136,9 @@ void System::tick(int clk) {
         } else if (top->m_axi_arlen+1 != 8) {
               cerr << "Read request with length != 8 (" << std::dec << top->m_axi_arlen << "+1)" << endl;
               Verilated::gotFinish(true);
+        } else if (r_addr < dram_offset) {
+              cerr << "Invalid 64-byte access, address " << std::hex << r_addr << " is before the start of memory at " << dram_offset << endl;
+              Verilated::gotFinish(true);
         } else if (r_addr > (dram_offset + ramsize - 64)) {
             cerr << "Invalid 64-byte access, address " << std::hex << r_addr << " is beyond end of memory at " << ramsize << endl;
             Verilated::gotFinish(true);
@@ -167,6 +170,9 @@ void System::tick(int clk) {
         } else if (top->m_axi_awlen+1 != 8) {
             cerr << "Write request with length != 8 (" << std::dec << top->m_axi_awlen << "+1)" << endl;
             Verilated::gotFinish(true);
+        } else if (w_addr < dram_offset) {
+              cerr << "Invalid 64-byte access, address " << std::hex << w_addr << " is before the start of memory at " << dram_offset << endl;
+              Verilated::gotFinish(true);
         } else if (w_addr > (dram_offset + ramsize - 64)) {
             cerr << "Invalid 64-byte access, address " << std::hex << w_addr << " is beyond end of memory at " << ramsize << endl;
             Verilated::gotFinish(true);
