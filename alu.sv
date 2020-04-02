@@ -8,7 +8,6 @@ module Alu
 
     // Instead of OP: we only need to specify control lines
     input width_32, //set for OP_32 instructions
-    input [6:0] op,
 
     input is_load,
     input is_store,

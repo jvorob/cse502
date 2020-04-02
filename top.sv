@@ -260,7 +260,6 @@ module top
         .funct3  (EX_deco.funct3),
         .funct7  (EX_deco.funct7),
         .width_32(EX_deco.alu_width_32),
-        .op(0), // This is unused I think?
         .is_load(EX_deco.is_load),
         .is_store(EX_deco.is_store),
 
