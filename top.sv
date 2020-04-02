@@ -7,6 +7,7 @@
 `include "hazard.sv"
 `include "memory_system.sv"
 `include "mem_stage.sv"
+`include "csr.sv"
 
 module top
 #(
@@ -174,6 +175,7 @@ module top
     Decoder d(
         .inst(ID_reg.curr_inst),
         .valid(ID_reg.valid),
+        .pc(ID_reg.curr_pc),
         .out(ID_deco)
     );
     
@@ -303,6 +305,8 @@ module top
         end else if (EX_deco.keep_pc_plus_immed) begin //FOR AUIPC
             exec_result = EX_reg.curr_pc + EX_deco.immed;
 
+        end else if (EX_deco.alu_nop) begin
+            exec_result = EX_reg.curr_val_rs1;
         end else begin //All others
             exec_result = alu_out;
         end
@@ -347,6 +351,29 @@ module top
     logic dcache_valid;
     logic write_done;
 
+    logic [63:0] csr_rs1_val;
+    logic [63:0] csr_result;
+    logic [63:0] mem_stage_result;
+
+    assign csr_rs1_val = (MEM_reg.curr_deco.csr_immed) ? MEM_reg.curr_deco.rs1 : MEM_reg.curr_data;
+    assign mem_stage_result = (MEM_reg.curr_deco.is_csr) ? csr_result : mem_ex_rdata;
+
+    Control_Status_Reg CSRs(
+        .clk,
+        .reset,
+
+        .addr(MEM_reg.curr_deco.immed),
+        .val(csr_rs1_val),
+
+        .valid(MEM_reg.valid),
+        .is_csr(MEM_reg.curr_deco.is_csr),
+        .csr_rw(MEM_reg.curr_deco.csr_rw),
+        .csr_rs(MEM_reg.curr_deco.csr_rs),
+        .csr_rc(MEM_reg.curr_deco.csr_rc),
+       
+        .csr_result(csr_result)
+    );
+
     MEM_Stage mem_stage(
         .clk,
         .reset,
@@ -386,7 +413,7 @@ module top
         .next_pc(MEM_reg.curr_pc),
         .next_deco(MEM_reg.curr_deco),
         .next_alu_result(MEM_reg.curr_data),
-        .next_mem_result(mem_ex_rdata),
+        .next_mem_result(mem_stage_result),
 
         // Data signals for current WB step
         .curr_pc(),

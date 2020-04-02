@@ -40,7 +40,15 @@ typedef struct packed {
     // - MISC_MEM: ??? TODO
     // - SYSTEM: ??? TODO
     logic is_ecall;
+    
+    // CSR
+    logic is_csr;
+    logic csr_rw; // read write
+    logic csr_rs; // read set
+    logic csr_rc; // read clear
+    logic csr_immed; // csr immediate instruction
 
+    logic alu_nop; // Don't do anything in the ALU. Pass rs1 through as the alu result.
 
 } decoded_inst_t;
 
@@ -52,6 +60,7 @@ module Decoder
 (
     input [31:0] inst,
     input valid,
+    input [63:0] pc,
     output decoded_inst_t out
 );
 
@@ -110,6 +119,13 @@ module Decoder
         out.is_ecall = 0;
 		out.is_load = 0;
 		out.is_store = 0;
+
+        out.is_csr = 0;
+        out.csr_rw = 0;
+        out.csr_rs = 0;
+        out.csr_rc = 0;
+
+        out.alu_nop = 0;
 
         // === MAIN DECODER:
         // Determine immediate values, and which of rs1,rs2,and rd we're using
@@ -270,6 +286,53 @@ module Decoder
                             $display("Invalid instruction for opcode=OP_SYSTEM and funct3=F3_ECALL_EBREAK.");
                         end
 					end
+                    F3SYS_CSRRW: begin
+                        { out.en_rs1, out.en_rd } = 2'b11;
+                        out.is_csr = 1;
+                        out.csr_rw = 1;
+                        out.alu_nop = 1;
+                        out.immed = immed_I;
+                    end
+                    F3SYS_CSRRS: begin
+                        { out.en_rs1, out.en_rd } = 2'b11;
+                        out.is_csr = 1;
+                        out.csr_rs = 1;
+                        out.alu_nop = 1;
+                        out.immed = immed_I;
+                    end
+                    F3SYS_CSRRC: begin
+                        { out.en_rs1, out.en_rd } = 2'b11;
+                        out.is_csr = 1;
+                        out.csr_rc = 1;
+                        out.alu_nop = 1;
+                        out.immed = immed_I;
+                    end
+                    F3SYS_CSRRWI: begin
+                        out.en_rd = 1;
+                        out.is_csr = 1;
+                        out.csr_rw = 1;
+                        out.alu_nop = 1;
+                        out.immed = immed_I;
+
+                        out.csr_immed = 1;
+                    end
+                    F3SYS_CSRRSI: begin
+                        out.en_rd = 1;
+                        out.is_csr = 1;
+                        out.csr_rs = 1;
+                        out.alu_nop = 1;
+                        out.immed = immed_I;
+                    
+                        out.csr_immed = 1;
+                    end
+                    F3SYS_CSRRCI: begin
+                        out.en_rd = 1;
+                        out.is_csr = 1;
+                        out.csr_rc = 1;
+                        out.alu_nop = 1;
+                        out.immed = immed_I;
+                        out.csr_immed = 1;
+                    end
                     default: begin
                         $display("Invalid instruction for opcode=OP_SYSTEM. funct3 = %x.", funct3);
                     end
@@ -279,7 +342,7 @@ module Decoder
                 if (valid) $display("opcode = 0");
             end
             default: begin
-                if (valid) $display("Did not recognize opcode category.");
+                if (valid) $display("Did not recognize opcode category. inst = %x, pc = %x.", inst, pc);
             end
         endcase
     end
