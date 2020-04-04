@@ -139,6 +139,9 @@ void System::tick(int clk) {
         } else if (r_addr > (dram_offset + ramsize - 64)) {
             cerr << "Invalid 64-byte access, address " << std::hex << r_addr << " is beyond end of memory at " << ramsize << endl;
             Verilated::gotFinish(true);
+        } else if (r_addr < dram_offset) {
+            cerr << "Invalid 64-byte access, address " << std::hex << r_addr << " is before the start of memory at " << dram_offset << endl;
+            Verilated::gotFinish(true);
         } else if (addr_to_tag.find(r_addr)!=addr_to_tag.end()) {
             cerr << "Access for " << std::hex << r_addr << " already outstanding.  Ignoring..." << endl;
         } else {
@@ -169,6 +172,9 @@ void System::tick(int clk) {
             Verilated::gotFinish(true);
         } else if (w_addr > (dram_offset + ramsize - 64)) {
             cerr << "Invalid 64-byte access, address " << std::hex << w_addr << " is beyond end of memory at " << ramsize << endl;
+            Verilated::gotFinish(true);
+        } else if (w_addr < dram_offset) {
+            cerr << "Invalid 64-byte access, address " << std::hex << w_addr << " is before the start of memory at " << dram_offset << endl;
             Verilated::gotFinish(true);
         } else if (addr_to_tag.find(w_addr)!=addr_to_tag.end()) {
             cerr << "Access for " << std::hex << w_addr << " already outstanding.  Ignoring..." << endl;

@@ -23,7 +23,7 @@ module Control_Status_Reg
     
     output [REG_WIDTH-1:0] csr_result // The value to be written to rd.
 );
-    logic [0:CSR_COUNT-1][REG_WIDTH-1:0] csrs; // The CSR registers
+    logic [REG_WIDTH-1:0] csrs [0:CSR_COUNT-1]; // The CSR registers
 
     logic [1:0] csr_rw_perm;
     logic [1:0] lowest_priv;
@@ -35,20 +35,21 @@ module Control_Status_Reg
 
     always_ff @(posedge clk) begin
         if (reset) begin
-            integer i;
-            for (i = 0; i < CSR_COUNT; i = i + 1) begin
-                csrs[i] <= 64'h0;
-            end
+            csrs <= '{default:0};
+//            integer i;
+//            for (i = 0; i < CSR_COUNT; i = i + 1) begin
+//                csrs[i] <= 64'h0;
+//            end
         end
         else if (valid && is_csr) begin
             if (csr_rw) begin
                 csrs[addr] <= val;
             end
             else if (csr_rs) begin
-                csrs[addr] <= csr_result | val;
+                csrs[addr] <= csrs[addr] | val;
             end
             else begin // This is the condition for csr_rc.
-                csrs[addr] <= csr_result & (~val);
+                csrs[addr] <= csrs[addr] & (~val);
             end
         end
     end
