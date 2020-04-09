@@ -204,7 +204,7 @@ void System::tick(int clk) {
 
     if (top->m_axi_wvalid && w_count) {
         if (full_system && w_addr >= UART_LITE_BASE && w_addr < UART_LITE_BASE+0x1000) { /* UART Lite */
-            if (top->m_axi_wstrb == 0xF0) w_addr + 4;
+            if (top->m_axi_wstrb == 0xF0) w_addr += 4;
             else if (top->m_axi_wstrb != 0) {
                 cerr << "Write request with unsupported strobe value (" << std::dec << top->m_axi_wstrb << ")" << endl;
                 Verilated::gotFinish(true);
