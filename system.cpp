@@ -134,23 +134,23 @@ void System::tick(int clk) {
             cerr << "Read request with non-wrap burst (" << std::dec << top->m_axi_arburst << ") unsupported" << endl;
             Verilated::gotFinish(true);
         } else if (full_system && top->m_axi_araddr >= UART_LITE_BASE && top->m_axi_araddr < UART_LITE_BASE+0x1000) { /* UART Lite */
-            r_addr = (top->m_axi_araddr - UART_LITE_BASE) / 4;
-            if (r_addr == UART_LITE_STAT_REG) {
+            r_addr = top->m_axi_araddr;
+            if (r_addr == top->m_axi_araddr + 4*UART_LITE_STAT_REG) {
               r_queue.push_back(
                 make_pair(~UART_LITE_TX_FULL | ~UART_LITE_RX_FULL | ~UART_LITE_RX_VALID, make_pair(top->m_axi_arid, 1))
               );
             } else {
-              cerr << "Read request of uart_lite address (" << std::hex << top->m_axi_araddr << "/" << std::dec << r_addr << ") unsupported" << endl;
+              cerr << "Read request of uart_lite address (" << std::hex << top->m_axi_araddr << ") unsupported" << endl;
               Verilated::gotFinish(true);
             }
         } else if (top->m_axi_arlen+1 != 8) {
             cerr << "Read request with length != 8 (" << std::dec << top->m_axi_arlen << "+1)" << endl;
             Verilated::gotFinish(true);
         } else if (r_addr < dram_offset) {
-            cerr << "Invalid 64-byte access, address " << std::hex << r_addr << " is before the start of memory at " << dram_offset << endl;
+            cerr << "Invalid 64-byte read, address " << std::hex << r_addr << " is before the start of memory at " << dram_offset << endl;
             Verilated::gotFinish(true);
         } else if (r_addr > (dram_offset + ramsize - 64)) {
-            cerr << "Invalid 64-byte access, address " << std::hex << r_addr << " is beyond end of memory at " << ramsize << endl;
+            cerr << "Invalid 64-byte read, address " << std::hex << r_addr << " is beyond end of memory at " << ramsize << endl;
             Verilated::gotFinish(true);
         } else if (r_addr < dram_offset) {
             cerr << "Invalid 64-byte access, address " << std::hex << r_addr << " is before the start of memory at " << dram_offset << endl;
@@ -185,10 +185,10 @@ void System::tick(int clk) {
             cerr << "Write request with length != 8 (" << std::dec << top->m_axi_awlen << "+1)" << endl;
             Verilated::gotFinish(true);
         } else if (w_addr < dram_offset) {
-            cerr << "Invalid 64-byte access, address " << std::hex << w_addr << " is before the start of memory at " << dram_offset << endl;
+            cerr << "Invalid 64-byte write, address " << std::hex << w_addr << " is before the start of memory at " << dram_offset << endl;
             Verilated::gotFinish(true);
         } else if (w_addr > (dram_offset + ramsize - 64)) {
-            cerr << "Invalid 64-byte access, address " << std::hex << w_addr << " is beyond end of memory at " << ramsize << endl;
+            cerr << "Invalid 64-byte write, address " << std::hex << w_addr << " is beyond end of memory at " << ramsize << endl;
             Verilated::gotFinish(true);
         } else if (w_addr < dram_offset) {
             cerr << "Invalid 64-byte access, address " << std::hex << w_addr << " is before the start of memory at " << dram_offset << endl;
