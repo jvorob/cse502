@@ -131,25 +131,28 @@ void System::tick(int clk) {
         if (top->m_axi_arburst != 2) {
             cerr << "Read request with non-wrap burst (" << std::dec << top->m_axi_arburst << ") unsupported" << endl;
             Verilated::gotFinish(true);
-        } else if (full_system && top->m_axi_araddr >= UART_LITE_BASE && top->m_axi_araddr < UART_LITE_BASE+0x1000) { /* UART Lite */
-            if (top->m_axi_araddr == UART_LITE_BASE + 4*UART_LITE_STAT_REG) {
-              r_queue.push_back(
-                make_pair(0, make_pair(top->m_axi_arid, 1))
-              );
-            } else {
-              cerr << "Read request of uart_lite address (" << std::hex << top->m_axi_araddr << ") unsupported" << endl;
-              Verilated::gotFinish(true);
+        } else if (full_system) {
+            if (top->m_axi_araddr >= UART_LITE_BASE && top->m_axi_araddr < UART_LITE_BASE+0x1000) { /* UART Lite */
+                if (top->m_axi_araddr == UART_LITE_BASE + 4*UART_LITE_STAT_REG) {
+                    r_queue.push_back(make_pair(0, make_pair(top->m_axi_arid, 1)));
+                } else {
+                    cerr << "Read request of uart_lite address (" << std::hex << top->m_axi_araddr << ") unsupported" << endl;
+                    Verilated::gotFinish(true);
+                }
+            } else if (top->m_axi_araddr >= CLINT_BASE && top->m_axi_araddr < CLINT_BASE+0x1000) { /* CLINT */
+                cerr << "Read request of CLINT address (" << std::hex << w_addr << ") unsupported, but will return 0 and keep going" << endl;
+                r_queue.push_back(make_pair(0, make_pair(top->m_axi_arid, 1)));
             }
         } else {
             uint64_t r_addr = top->m_axi_araddr & ~0x3fULL;
-            if (top->m_axi_arlen+1 != 8) {
-                cerr << "Read request with length != 8 (" << std::dec << top->m_axi_arlen << "+1)" << endl;
-                Verilated::gotFinish(true);
-            } else if (r_addr < dram_offset) {
+            if (r_addr < dram_offset) {
                 cerr << "Invalid 64-byte read, address " << std::hex << r_addr << " is before the start of memory at " << dram_offset << endl;
                 Verilated::gotFinish(true);
             } else if (r_addr > (dram_offset + ramsize - 64)) {
                 cerr << "Invalid 64-byte read, address " << std::hex << r_addr << " is beyond end of memory at " << ramsize << endl;
+                Verilated::gotFinish(true);
+            } else if (top->m_axi_arlen+1 != 8) {
+                cerr << "Read request with length != 8 (" << std::dec << top->m_axi_arlen << "+1)" << endl;
                 Verilated::gotFinish(true);
             } else if (addr_to_tag.find(r_addr)!=addr_to_tag.end()) {
                 cerr << "Access for " << std::hex << r_addr << " already outstanding.  Ignoring..." << endl;
@@ -175,20 +178,25 @@ void System::tick(int clk) {
         if (top->m_axi_awburst != 1) {
             cerr << "Write request with non-incr burst (" << std::dec << top->m_axi_awburst << ") unsupported" << endl;
             Verilated::gotFinish(true);
-        } else if (full_system && top->m_axi_awaddr >= UART_LITE_BASE && top->m_axi_awaddr < UART_LITE_BASE+0x1000) { /* UART Lite */
+        } else if (full_system) {
+          if (top->m_axi_awaddr >= UART_LITE_BASE && top->m_axi_awaddr < UART_LITE_BASE+0x1000) { /* UART Lite */
             w_addr = top->m_axi_awaddr;
             w_count = 1;
+          } else if (w_addr >= CLINT_BASE && w_addr < CLINT_BASE+0x1000) { /* CLINT */
+            w_addr = top->m_axi_awaddr;
+            w_count = 1;
+          }
         } else {
             w_addr = top->m_axi_awaddr & ~0x3fULL;
             w_count = 8;
-            if (top->m_axi_awlen+1 != 8) {
-                cerr << "Write request with length != 8 (" << std::dec << top->m_axi_awlen << "+1)" << endl;
-                Verilated::gotFinish(true);
-            } else if (w_addr < dram_offset) {
+            if (w_addr < dram_offset) {
                 cerr << "Invalid 64-byte write, address " << std::hex << w_addr << " is before the start of memory at " << dram_offset << endl;
                 Verilated::gotFinish(true);
             } else if (w_addr > (dram_offset + ramsize - 64)) {
                 cerr << "Invalid 64-byte write, address " << std::hex << w_addr << " is beyond end of memory at " << ramsize << endl;
+                Verilated::gotFinish(true);
+            } else if (top->m_axi_awlen+1 != 8) {
+                cerr << "Write request with length != 8 (" << std::dec << top->m_axi_awlen << "+1)" << endl;
                 Verilated::gotFinish(true);
             } else if (addr_to_tag.find(w_addr)!=addr_to_tag.end()) {
                 cerr << "Access for " << std::hex << w_addr << " already outstanding.  Ignoring..." << endl;
@@ -203,18 +211,22 @@ void System::tick(int clk) {
     }
 
     if (top->m_axi_wvalid && w_count) {
-        if (full_system && w_addr >= UART_LITE_BASE && w_addr < UART_LITE_BASE+0x1000) { /* UART Lite */
-            if (top->m_axi_wstrb == 0xF0) w_addr += 4;
-            else if (top->m_axi_wstrb == 0x0F) { /* do nothing */ }
-            else {
-                cerr << "Write request with unsupported strobe value (" << std::hex << (int)(top->m_axi_wstrb) << ")" << endl;
-                Verilated::gotFinish(true);
-            }
-            if (w_addr == UART_LITE_BASE + 4*UART_LITE_REG_TXFIFO) cout << (char)(top->m_axi_wdata >> 32) << std::flush;
-            else if (w_addr == UART_LITE_BASE + 4*UART_LITE_CTRL_REG) { /* do nothing */ }
-            else {
-                cerr << "Write request of uart_lite address (" << std::hex << w_addr << ") unsupported" << endl;
-                Verilated::gotFinish(true);
+        if (full_system) {
+            if (w_addr >= UART_LITE_BASE && w_addr < UART_LITE_BASE+0x1000) { /* UART Lite */
+                if (top->m_axi_wstrb == 0xF0) w_addr += 4;
+                else if (top->m_axi_wstrb == 0x0F) { /* do nothing */ }
+                else {
+                    cerr << "Write request with unsupported strobe value (" << std::hex << (int)(top->m_axi_wstrb) << ")" << endl;
+                    Verilated::gotFinish(true);
+                }
+                if (w_addr == UART_LITE_BASE + 4*UART_LITE_REG_TXFIFO) cout << (char)(top->m_axi_wdata >> 32) << std::flush;
+                else if (w_addr == UART_LITE_BASE + 4*UART_LITE_CTRL_REG) { /* do nothing */ }
+                else {
+                    cerr << "Write request of uart_lite address (" << std::hex << w_addr << ") unsupported" << endl;
+                    Verilated::gotFinish(true);
+                }
+            } else if (w_addr >= CLINT_BASE && w_addr < CLINT_BASE+0x1000) { /* CLINT */
+                cerr << "Write request of CLINT address (" << std::hex << w_addr << ") unsupported, but will keep going anyway" << endl;
             }
         } else {
             // if transfer is in progress, can't change mind about willAcceptTransaction()
