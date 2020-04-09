@@ -204,7 +204,7 @@ void System::tick(int clk) {
 
     if (top->m_axi_wvalid && w_count) {
         if (full_system && w_addr >= UART_LITE_BASE && w_addr < UART_LITE_BASE+0x1000) { /* UART Lite */
-          if (w_addr == UART_LITE_BASE + 4*UART_LITE_REG_TXFIFO) cout << (char)(top->m_axi_wdata);
+          if (w_addr == UART_LITE_BASE + 4*UART_LITE_REG_TXFIFO) cout << (char)(top->m_axi_wdata) << std::flush;
         } else {
           // if transfer is in progress, can't change mind about willAcceptTransaction()
           assert(willAcceptTransaction(w_addr));
