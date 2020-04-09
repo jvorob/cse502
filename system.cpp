@@ -209,8 +209,8 @@ void System::tick(int clk) {
                 cerr << "Write request with unsupported strobe value (" << std::dec << top->m_axi_wstrb << ")" << endl;
                 Verilated::gotFinish(true);
             }
-            if (w_addr == UART_LITE_BASE + 4*UART_LITE_REG_TXFIFO) cout << (char)(top->m_axi_wdata >> 56) << std::flush;
-            if (w_addr == UART_LITE_BASE + 4*UART_LITE_CTRL_REG) { /* do nothing */ }
+            if (w_addr == UART_LITE_BASE + 4*UART_LITE_REG_TXFIFO) cout << (char)(top->m_axi_wdata >> 32) << std::flush;
+            else if (w_addr == UART_LITE_BASE + 4*UART_LITE_CTRL_REG) { /* do nothing */ }
             else {
                 cerr << "Write request of uart_lite address (" << std::hex << w_addr << ") unsupported" << endl;
                 Verilated::gotFinish(true);
