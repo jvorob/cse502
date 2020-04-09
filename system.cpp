@@ -140,7 +140,7 @@ void System::tick(int clk) {
                 make_pair(~UART_LITE_TX_FULL | ~UART_LITE_RX_FULL | ~UART_LITE_RX_VALID, make_pair(top->m_axi_arid, 1))
               );
             } else {
-              cerr << "Read request of uart_lite address (" << std::dec << r_addr << ") unsupported" << endl;
+              cerr << "Read request of uart_lite address (" << std::hex << top->m_axi_araddr << "/" << std::dec << r_addr << ") unsupported" << endl;
               Verilated::gotFinish(true);
             }
         } else if (top->m_axi_arlen+1 != 8) {
