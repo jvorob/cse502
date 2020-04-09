@@ -142,14 +142,14 @@ void System::tick(int clk) {
             }
         } else {
             uint64_t r_addr = top->m_axi_araddr & ~0x3fULL;
-            if (top->m_axi_arlen+1 != 8) {
-                cerr << "Read request with length != 8 (" << std::dec << top->m_axi_arlen << "+1)" << endl;
-                Verilated::gotFinish(true);
-            } else if (r_addr < dram_offset) {
+            if (r_addr < dram_offset) {
                 cerr << "Invalid 64-byte read, address " << std::hex << r_addr << " is before the start of memory at " << dram_offset << endl;
                 Verilated::gotFinish(true);
             } else if (r_addr > (dram_offset + ramsize - 64)) {
                 cerr << "Invalid 64-byte read, address " << std::hex << r_addr << " is beyond end of memory at " << ramsize << endl;
+                Verilated::gotFinish(true);
+            } else if (top->m_axi_arlen+1 != 8) {
+                cerr << "Read request with length != 8 (" << std::dec << top->m_axi_arlen << "+1)" << endl;
                 Verilated::gotFinish(true);
             } else if (addr_to_tag.find(r_addr)!=addr_to_tag.end()) {
                 cerr << "Access for " << std::hex << r_addr << " already outstanding.  Ignoring..." << endl;
@@ -181,14 +181,14 @@ void System::tick(int clk) {
         } else {
             w_addr = top->m_axi_awaddr & ~0x3fULL;
             w_count = 8;
-            if (top->m_axi_awlen+1 != 8) {
-                cerr << "Write request with length != 8 (" << std::dec << top->m_axi_awlen << "+1)" << endl;
-                Verilated::gotFinish(true);
-            } else if (w_addr < dram_offset) {
+            if (w_addr < dram_offset) {
                 cerr << "Invalid 64-byte write, address " << std::hex << w_addr << " is before the start of memory at " << dram_offset << endl;
                 Verilated::gotFinish(true);
             } else if (w_addr > (dram_offset + ramsize - 64)) {
                 cerr << "Invalid 64-byte write, address " << std::hex << w_addr << " is beyond end of memory at " << ramsize << endl;
+                Verilated::gotFinish(true);
+            } else if (top->m_axi_awlen+1 != 8) {
+                cerr << "Write request with length != 8 (" << std::dec << top->m_axi_awlen << "+1)" << endl;
                 Verilated::gotFinish(true);
             } else if (addr_to_tag.find(w_addr)!=addr_to_tag.end()) {
                 cerr << "Access for " << std::hex << w_addr << " already outstanding.  Ignoring..." << endl;
