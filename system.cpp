@@ -135,9 +135,11 @@ void System::tick(int clk) {
             Verilated::gotFinish(true);
         } else if (full_system && top->m_axi_awaddr >= UART_LITE_BASE && top->m_axi_awaddr < UART_LITE_BASE+0x1000) { /* UART Lite */
             r_addr = (top->m_axi_awaddr - UART_LITE_BASE) / 4;
-            if (r_addr == UART_LITE_STAT_REG) r_queue.push_back(
-              make_pair(~UART_LITE_TX_FULL | ~UART_LITE_RX_FULL | ~UART_LITE_RX_VALID, make_pair(top->m_axi_arid, 1))
-            ) else {
+            if (r_addr == UART_LITE_STAT_REG) {
+              r_queue.push_back(
+                make_pair(~UART_LITE_TX_FULL | ~UART_LITE_RX_FULL | ~UART_LITE_RX_VALID, make_pair(top->m_axi_arid, 1))
+              );
+            } else {
               cerr << "Read request of uart_lite address (" << std::dec << r_addr << ") unsupported" << endl;
               Verilated::gotFinish(true);
             }
