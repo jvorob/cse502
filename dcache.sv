@@ -215,7 +215,7 @@ module Dcache
                 end
             end
             3'h3: begin // address channel
-                //$display("dcache fetch request addr: %x", dcache_m_axi_araddr);
+                $display("dcache fetch request addr: %x", dcache_m_axi_araddr);
                 line_tag[rplc_index][rplc_way] <= rplc_tag;
                 line_valid[rplc_index][rplc_way] <= 1'b0;
                 rplc_offset <= rplc_addr[LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_WORD_LEN];
@@ -224,6 +224,7 @@ module Dcache
             end
             3'h4: begin // data channel
                 if(dcache_m_axi_rvalid) begin
+                    $display("dcache fetch offset: %x, data: %x", rplc_offset, dcache_m_axi_rdata);
                     mem[rplc_index][rplc_way][rplc_offset] <= dcache_m_axi_rdata;
                     rplc_offset <= rplc_offset + 1;
                     if(dcache_m_axi_rlast) begin
