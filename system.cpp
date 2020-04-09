@@ -182,7 +182,7 @@ void System::tick(int clk) {
           if (top->m_axi_awaddr >= UART_LITE_BASE && top->m_axi_awaddr < UART_LITE_BASE+0x1000) { /* UART Lite */
             w_addr = top->m_axi_awaddr;
             w_count = 1;
-          } else if (w_addr >= CLINT_BASE && w_addr < CLINT_BASE+0x1000) { /* CLINT */
+          } else if (top->m_axi_awaddr >= CLINT_BASE && top->m_axi_awaddr < CLINT_BASE+0x1000) { /* CLINT */
             w_addr = top->m_axi_awaddr;
             w_count = 1;
           }
