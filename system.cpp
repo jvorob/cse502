@@ -134,11 +134,11 @@ void System::tick(int clk) {
             cerr << "Read request with non-wrap burst (" << std::dec << top->m_axi_arburst << ") unsupported" << endl;
             Verilated::gotFinish(true);
         } else if (top->m_axi_arlen+1 != 8) {
-              cerr << "Read request with length != 8 (" << std::dec << top->m_axi_arlen << "+1)" << endl;
-              Verilated::gotFinish(true);
+            cerr << "Read request with length != 8 (" << std::dec << top->m_axi_arlen << "+1)" << endl;
+            Verilated::gotFinish(true);
         } else if (r_addr < dram_offset) {
-              cerr << "Invalid 64-byte access, address " << std::hex << r_addr << " is before the start of memory at " << dram_offset << endl;
-              Verilated::gotFinish(true);
+            cerr << "Invalid 64-byte access, address " << std::hex << r_addr << " is before the start of memory at " << dram_offset << endl;
+            Verilated::gotFinish(true);
         } else if (r_addr > (dram_offset + ramsize - 64)) {
             cerr << "Invalid 64-byte access, address " << std::hex << r_addr << " is beyond end of memory at " << ramsize << endl;
             Verilated::gotFinish(true);
@@ -163,16 +163,21 @@ void System::tick(int clk) {
 
     if (top->m_axi_awvalid) {
         w_addr = top->m_axi_awaddr & ~0x3fULL;
+        w_count = 8;
 
         if (top->m_axi_awburst != 1) {
             cerr << "Write request with non-incr burst (" << std::dec << top->m_axi_awburst << ") unsupported" << endl;
             Verilated::gotFinish(true);
+
+        } else if (full_system && top->m_axi_awaddr >= 0x70beef00 && top->m_axi_awaddr < 0x70beef00+0x1000) { /* UART Lite */
+            w_addr = (top->m_axi_awaddr - 0x70beef00) / 4;
+            w_count = 1;
         } else if (top->m_axi_awlen+1 != 8) {
             cerr << "Write request with length != 8 (" << std::dec << top->m_axi_awlen << "+1)" << endl;
             Verilated::gotFinish(true);
         } else if (w_addr < dram_offset) {
-              cerr << "Invalid 64-byte access, address " << std::hex << w_addr << " is before the start of memory at " << dram_offset << endl;
-              Verilated::gotFinish(true);
+            cerr << "Invalid 64-byte access, address " << std::hex << w_addr << " is before the start of memory at " << dram_offset << endl;
+            Verilated::gotFinish(true);
         } else if (w_addr > (dram_offset + ramsize - 64)) {
             cerr << "Invalid 64-byte access, address " << std::hex << w_addr << " is beyond end of memory at " << ramsize << endl;
             Verilated::gotFinish(true);
@@ -185,13 +190,18 @@ void System::tick(int clk) {
                   );
             addr_to_tag[w_addr] = make_pair(top->m_axi_awaddr, top->m_axi_awid);
         }
-        w_count = 8;
     }
 
     if (top->m_axi_wvalid && w_count) {
-        // if transfer is in progress, can't change mind about willAcceptTransaction()
-        assert(willAcceptTransaction(w_addr));
-        *((uint64_t*)(&ram[w_addr - dram_offset + (8-w_count)*8])) = top->m_axi_wdata;
+        if (full_system && top->m_axi_awaddr >= 0x70beef00 && top->m_axi_awaddr < 0x70beef00+0x1000) { /* UART Lite */
+          enum { UART_LITE_REG_RXFIFO = 0, UART_LITE_REG_TXFIFO = 1, UART_LITE_STAT_REG = 2, UART_LITE_CTRL_REG = 3 };
+          enum { UART_LITE_TX_FULL = 3, UART_LITE_RX_FULL = 1, UART_LITE_RX_VALID = 0 };
+          if (w_addr == UART_LITE_REG_TXFIFO) cout << (char)(top->m_axi_wdata);
+        } else {
+          // if transfer is in progress, can't change mind about willAcceptTransaction()
+          assert(willAcceptTransaction(w_addr));
+          *((uint64_t*)(&ram[w_addr - dram_offset + (8-w_count)*8])) = top->m_axi_wdata;
+        }
         if(--w_count == 0) assert(top->m_axi_wlast);
     }
 
