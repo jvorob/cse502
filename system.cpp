@@ -210,7 +210,7 @@ void System::tick(int clk) {
                 Verilated::gotFinish(true);
             }
             if (w_addr == UART_LITE_BASE + 4*UART_LITE_REG_TXFIFO) cout << (char)(top->m_axi_wdata >> 56) << std::flush;
-            if (w_addr == UART_LITE_BASE + 4*UART_LITE_CTRL_REG) { /* do nothing */ }
+            else if (w_addr == UART_LITE_BASE + 4*UART_LITE_CTRL_REG) { /* do nothing */ }
             else {
                 cerr << "Write request of uart_lite address (" << std::hex << w_addr << ") unsupported" << endl;
                 Verilated::gotFinish(true);
