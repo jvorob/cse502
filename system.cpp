@@ -134,7 +134,7 @@ void System::tick(int clk) {
         } else if (full_system && top->m_axi_araddr >= UART_LITE_BASE && top->m_axi_araddr < UART_LITE_BASE+0x1000) { /* UART Lite */
             if (top->m_axi_araddr == UART_LITE_BASE + 4*UART_LITE_STAT_REG) {
               r_queue.push_back(
-                make_pair(~UART_LITE_TX_FULL | ~UART_LITE_RX_FULL | ~UART_LITE_RX_VALID, make_pair(top->m_axi_arid, 1))
+                make_pair(0, make_pair(top->m_axi_arid, 1))
               );
             } else {
               cerr << "Read request of uart_lite address (" << std::hex << top->m_axi_araddr << ") unsupported" << endl;
