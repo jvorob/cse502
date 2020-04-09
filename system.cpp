@@ -133,6 +133,14 @@ void System::tick(int clk) {
         if (top->m_axi_arburst != 2) {
             cerr << "Read request with non-wrap burst (" << std::dec << top->m_axi_arburst << ") unsupported" << endl;
             Verilated::gotFinish(true);
+        } else if (full_system && top->m_axi_awaddr >= UART_LITE_BASE && top->m_axi_awaddr < UART_LITE_BASE+0x1000) { /* UART Lite */
+            r_addr = (top->m_axi_awaddr - UART_LITE_BASE) / 4;
+            if (r_addr == UART_LITE_STAT_REG) r_queue.push_back(
+              make_pair(~UART_LITE_TX_FULL | ~UART_LITE_RX_FULL | ~UART_LITE_RX_VALID, make_pair(top->m_axi_arid, 1))
+            ) else {
+              cerr << "Read request of uart_lite address (" << std::dec << r_addr << ") unsupported" << endl;
+              Verilated::gotFinish(true);
+            }
         } else if (top->m_axi_arlen+1 != 8) {
             cerr << "Read request with length != 8 (" << std::dec << top->m_axi_arlen << "+1)" << endl;
             Verilated::gotFinish(true);
@@ -168,9 +176,8 @@ void System::tick(int clk) {
         if (top->m_axi_awburst != 1) {
             cerr << "Write request with non-incr burst (" << std::dec << top->m_axi_awburst << ") unsupported" << endl;
             Verilated::gotFinish(true);
-
-        } else if (full_system && top->m_axi_awaddr >= 0x70beef00 && top->m_axi_awaddr < 0x70beef00+0x1000) { /* UART Lite */
-            w_addr = (top->m_axi_awaddr - 0x70beef00) / 4;
+        } else if (full_system && top->m_axi_awaddr >= UART_LITE_BASE && top->m_axi_awaddr < UART_LITE_BASE+0x1000) { /* UART Lite */
+            w_addr = (top->m_axi_awaddr - UART_LITE_BASE) / 4;
             w_count = 1;
         } else if (top->m_axi_awlen+1 != 8) {
             cerr << "Write request with length != 8 (" << std::dec << top->m_axi_awlen << "+1)" << endl;
@@ -193,9 +200,7 @@ void System::tick(int clk) {
     }
 
     if (top->m_axi_wvalid && w_count) {
-        if (full_system && top->m_axi_awaddr >= 0x70beef00 && top->m_axi_awaddr < 0x70beef00+0x1000) { /* UART Lite */
-          enum { UART_LITE_REG_RXFIFO = 0, UART_LITE_REG_TXFIFO = 1, UART_LITE_STAT_REG = 2, UART_LITE_CTRL_REG = 3 };
-          enum { UART_LITE_TX_FULL = 3, UART_LITE_RX_FULL = 1, UART_LITE_RX_VALID = 0 };
+        if (full_system && top->m_axi_awaddr >= UART_LITE_BASE && top->m_axi_awaddr < UART_LITE_BASE+0x1000) { /* UART Lite */
           if (w_addr == UART_LITE_REG_TXFIFO) cout << (char)(top->m_axi_wdata);
         } else {
           // if transfer is in progress, can't change mind about willAcceptTransaction()
