@@ -326,7 +326,7 @@ uint64_t System::load_binary(const char* filename) {
       off_t sz = lseek(fd, 0L, SEEK_END);
       assert(sz == pread(fd, &ram[0], sz, 0));
       close(fd);
-      char* dtb = (char*)memmem((&ram[sz]-1000), 1000, "--CSE502--", 10)+10;
+      char* dtb = (char*)memmem((&ram[sz]-1000), 1000, "---CSE502---", 12)+12;
       assert(dtb);
       top->stackptr = (dtb-&ram[0]);
       cerr << "DTB is at 0x" << std::hex << top->stackptr << endl;
