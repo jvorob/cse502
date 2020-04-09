@@ -47,6 +47,7 @@ module RegFile
             for (i = 0; i < 32; i = i + 1)
                 regs[i] <= 64'h0000_0000_0000_0000;
             regs[SP] <= stackptr;
+            regs[A1] <= stackptr + 64'h0_8000_0000;
         end
         else if (wb_en)
             if (wb_addr == 0)

@@ -133,9 +133,22 @@ void System::tick(int clk) {
         if (top->m_axi_arburst != 2) {
             cerr << "Read request with non-wrap burst (" << std::dec << top->m_axi_arburst << ") unsupported" << endl;
             Verilated::gotFinish(true);
-        } else if (top->m_axi_arlen+1 != 8) {
-              cerr << "Read request with length != 8 (" << std::dec << top->m_axi_arlen << "+1)" << endl;
+        } else if (full_system && top->m_axi_awaddr >= UART_LITE_BASE && top->m_axi_awaddr < UART_LITE_BASE+0x1000) { /* UART Lite */
+            r_addr = (top->m_axi_awaddr - UART_LITE_BASE) / 4;
+            if (r_addr == UART_LITE_STAT_REG) {
+              r_queue.push_back(
+                make_pair(~UART_LITE_TX_FULL | ~UART_LITE_RX_FULL | ~UART_LITE_RX_VALID, make_pair(top->m_axi_arid, 1))
+              );
+            } else {
+              cerr << "Read request of uart_lite address (" << std::dec << r_addr << ") unsupported" << endl;
               Verilated::gotFinish(true);
+            }
+        } else if (top->m_axi_arlen+1 != 8) {
+            cerr << "Read request with length != 8 (" << std::dec << top->m_axi_arlen << "+1)" << endl;
+            Verilated::gotFinish(true);
+        } else if (r_addr < dram_offset) {
+            cerr << "Invalid 64-byte access, address " << std::hex << r_addr << " is before the start of memory at " << dram_offset << endl;
+            Verilated::gotFinish(true);
         } else if (r_addr > (dram_offset + ramsize - 64)) {
             cerr << "Invalid 64-byte access, address " << std::hex << r_addr << " is beyond end of memory at " << ramsize << endl;
             Verilated::gotFinish(true);
@@ -163,12 +176,19 @@ void System::tick(int clk) {
 
     if (top->m_axi_awvalid) {
         w_addr = top->m_axi_awaddr & ~0x3fULL;
+        w_count = 8;
 
         if (top->m_axi_awburst != 1) {
             cerr << "Write request with non-incr burst (" << std::dec << top->m_axi_awburst << ") unsupported" << endl;
             Verilated::gotFinish(true);
+        } else if (full_system && top->m_axi_awaddr >= UART_LITE_BASE && top->m_axi_awaddr < UART_LITE_BASE+0x1000) { /* UART Lite */
+            w_addr = (top->m_axi_awaddr - UART_LITE_BASE) / 4;
+            w_count = 1;
         } else if (top->m_axi_awlen+1 != 8) {
             cerr << "Write request with length != 8 (" << std::dec << top->m_axi_awlen << "+1)" << endl;
+            Verilated::gotFinish(true);
+        } else if (w_addr < dram_offset) {
+            cerr << "Invalid 64-byte access, address " << std::hex << w_addr << " is before the start of memory at " << dram_offset << endl;
             Verilated::gotFinish(true);
         } else if (w_addr > (dram_offset + ramsize - 64)) {
             cerr << "Invalid 64-byte access, address " << std::hex << w_addr << " is beyond end of memory at " << ramsize << endl;
@@ -186,13 +206,16 @@ void System::tick(int clk) {
                   );
             addr_to_tag[w_addr] = make_pair(top->m_axi_awaddr, top->m_axi_awid);
         }
-        w_count = 8;
     }
 
     if (top->m_axi_wvalid && w_count) {
-        // if transfer is in progress, can't change mind about willAcceptTransaction()
-        assert(willAcceptTransaction(w_addr));
-        *((uint64_t*)(&ram[w_addr - dram_offset + (8-w_count)*8])) = top->m_axi_wdata;
+        if (full_system && top->m_axi_awaddr >= UART_LITE_BASE && top->m_axi_awaddr < UART_LITE_BASE+0x1000) { /* UART Lite */
+          if (w_addr == UART_LITE_REG_TXFIFO) cout << (char)(top->m_axi_wdata);
+        } else {
+          // if transfer is in progress, can't change mind about willAcceptTransaction()
+          assert(willAcceptTransaction(w_addr));
+          *((uint64_t*)(&ram[w_addr - dram_offset + (8-w_count)*8])) = top->m_axi_wdata;
+        }
         if(--w_count == 0) assert(top->m_axi_wlast);
     }
 
@@ -318,6 +341,10 @@ uint64_t System::load_binary(const char* filename) {
       off_t sz = lseek(fd, 0L, SEEK_END);
       assert(sz == pread(fd, &ram[0], sz, 0));
       close(fd);
+      char* dtb = (char*)memmem((&ram[sz]-1000), 1000, "---CSE502---", 12)+12;
+      assert(dtb);
+      top->stackptr = (dtb-&ram[0]);
+      cerr << "DTB is at 0x" << std::hex << top->stackptr << endl;
       return dram_offset;
     }
 
