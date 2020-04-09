@@ -24,6 +24,8 @@
 enum { UART_LITE_REG_RXFIFO = 0, UART_LITE_REG_TXFIFO = 1, UART_LITE_STAT_REG = 2, UART_LITE_CTRL_REG = 3 };
 enum { UART_LITE_TX_FULL = 3, UART_LITE_RX_FULL = 1, UART_LITE_RX_VALID = 0 };
 
+#define CLINT_BASE 0x70AEEF00ULL
+
 typedef unsigned long __uint64_t;
 typedef __uint64_t uint64_t;
 typedef unsigned int __uint32_t;
