@@ -132,7 +132,7 @@ void System::tick(int clk) {
             cerr << "Read request with non-wrap burst (" << std::dec << top->m_axi_arburst << ") unsupported" << endl;
             Verilated::gotFinish(true);
         } else if (full_system && top->m_axi_araddr >= UART_LITE_BASE && top->m_axi_araddr < UART_LITE_BASE+0x1000) { /* UART Lite */
-            if (top->m_axi_araddr == top->m_axi_araddr + 4*UART_LITE_STAT_REG) {
+            if (top->m_axi_araddr == UART_LITE_BASE + 4*UART_LITE_STAT_REG) {
               r_queue.push_back(
                 make_pair(~UART_LITE_TX_FULL | ~UART_LITE_RX_FULL | ~UART_LITE_RX_VALID, make_pair(top->m_axi_arid, 1))
               );
