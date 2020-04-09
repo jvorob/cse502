@@ -172,14 +172,11 @@ void System::tick(int clk) {
     }
 
     if (top->m_axi_awvalid) {
-        w_addr = top->m_axi_awaddr & ~0x3fULL;
-        w_count = 8;
-
         if (top->m_axi_awburst != 1) {
             cerr << "Write request with non-incr burst (" << std::dec << top->m_axi_awburst << ") unsupported" << endl;
             Verilated::gotFinish(true);
         } else if (full_system && top->m_axi_awaddr >= UART_LITE_BASE && top->m_axi_awaddr < UART_LITE_BASE+0x1000) { /* UART Lite */
-            w_addr = (top->m_axi_awaddr - UART_LITE_BASE) / 4;
+            w_addr = top->m_axi_awaddr;
             w_count = 1;
         } else if (top->m_axi_awlen+1 != 8) {
             cerr << "Write request with length != 8 (" << std::dec << top->m_axi_awlen << "+1)" << endl;
@@ -192,7 +189,11 @@ void System::tick(int clk) {
             Verilated::gotFinish(true);
         } else if (addr_to_tag.find(w_addr)!=addr_to_tag.end()) {
             cerr << "Access for " << std::hex << w_addr << " already outstanding.  Ignoring..." << endl;
+            w_addr = top->m_axi_awaddr & ~0x3fULL;
+            w_count = 8;
         } else {
+            w_addr = top->m_axi_awaddr & ~0x3fULL;
+            w_count = 8;
             assert(willAcceptTransaction(w_addr)); // if this gets triggered, need to rethink AXI "ready" signal strategy
             assert(
                     dramsim->addTransaction(true, w_addr - dram_offset)
@@ -202,8 +203,8 @@ void System::tick(int clk) {
     }
 
     if (top->m_axi_wvalid && w_count) {
-        if (full_system && top->m_axi_awaddr >= UART_LITE_BASE && top->m_axi_awaddr < UART_LITE_BASE+0x1000) { /* UART Lite */
-          if (w_addr == UART_LITE_REG_TXFIFO) cout << (char)(top->m_axi_wdata);
+        if (full_system && w_addr >= UART_LITE_BASE && w_addr < UART_LITE_BASE+0x1000) { /* UART Lite */
+          if (w_addr == UART_LITE_BASE + 4*UART_LITE_REG_TXFIFO) cout << (char)(top->m_axi_wdata);
         } else {
           // if transfer is in progress, can't change mind about willAcceptTransaction()
           assert(willAcceptTransaction(w_addr));
