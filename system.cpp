@@ -177,6 +177,11 @@ void System::tick(int clk) {
             Verilated::gotFinish(true);
         } else if (full_system && top->m_axi_awaddr >= UART_LITE_BASE && top->m_axi_awaddr < UART_LITE_BASE+0x1000) { /* UART Lite */
             w_addr = top->m_axi_awaddr;
+            if (top->m_axi_wstrb == 0xF0) w_addr + 4;
+            else if (top->m_axi_wstrb != 0) {
+                cerr << "Write request with unsupported strobe value (" << std::dec << top->m_axi_wstrb << ")" << endl;
+                Verilated::gotFinish(true);
+            }
             w_count = 1;
         } else {
             w_addr = top->m_axi_awaddr & ~0x3fULL;
