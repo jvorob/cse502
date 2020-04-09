@@ -128,14 +128,11 @@ void System::tick(int clk) {
     dramsim->update();    
 
     if (top->m_axi_arvalid) {
-        uint64_t r_addr = top->m_axi_araddr & ~0x3fULL;
-
         if (top->m_axi_arburst != 2) {
             cerr << "Read request with non-wrap burst (" << std::dec << top->m_axi_arburst << ") unsupported" << endl;
             Verilated::gotFinish(true);
         } else if (full_system && top->m_axi_araddr >= UART_LITE_BASE && top->m_axi_araddr < UART_LITE_BASE+0x1000) { /* UART Lite */
-            r_addr = top->m_axi_araddr;
-            if (r_addr == top->m_axi_araddr + 4*UART_LITE_STAT_REG) {
+            if (top->m_axi_araddr == top->m_axi_araddr + 4*UART_LITE_STAT_REG) {
               r_queue.push_back(
                 make_pair(~UART_LITE_TX_FULL | ~UART_LITE_RX_FULL | ~UART_LITE_RX_VALID, make_pair(top->m_axi_arid, 1))
               );
@@ -143,26 +140,26 @@ void System::tick(int clk) {
               cerr << "Read request of uart_lite address (" << std::hex << top->m_axi_araddr << ") unsupported" << endl;
               Verilated::gotFinish(true);
             }
-        } else if (top->m_axi_arlen+1 != 8) {
-            cerr << "Read request with length != 8 (" << std::dec << top->m_axi_arlen << "+1)" << endl;
-            Verilated::gotFinish(true);
-        } else if (r_addr < dram_offset) {
-            cerr << "Invalid 64-byte read, address " << std::hex << r_addr << " is before the start of memory at " << dram_offset << endl;
-            Verilated::gotFinish(true);
-        } else if (r_addr > (dram_offset + ramsize - 64)) {
-            cerr << "Invalid 64-byte read, address " << std::hex << r_addr << " is beyond end of memory at " << ramsize << endl;
-            Verilated::gotFinish(true);
-        } else if (r_addr < dram_offset) {
-            cerr << "Invalid 64-byte access, address " << std::hex << r_addr << " is before the start of memory at " << dram_offset << endl;
-            Verilated::gotFinish(true);
-        } else if (addr_to_tag.find(r_addr)!=addr_to_tag.end()) {
-            cerr << "Access for " << std::hex << r_addr << " already outstanding.  Ignoring..." << endl;
         } else {
-            assert(willAcceptTransaction(r_addr)); // if this gets triggered, need to rethink AXI "ready" signal strategy
-            assert(
-                    dramsim->addTransaction(false, r_addr - dram_offset)
-                  );
-            addr_to_tag[r_addr] = make_pair(top->m_axi_araddr, top->m_axi_arid);
+            uint64_t r_addr = top->m_axi_araddr & ~0x3fULL;
+            if (top->m_axi_arlen+1 != 8) {
+                cerr << "Read request with length != 8 (" << std::dec << top->m_axi_arlen << "+1)" << endl;
+                Verilated::gotFinish(true);
+            } else if (r_addr < dram_offset) {
+                cerr << "Invalid 64-byte read, address " << std::hex << r_addr << " is before the start of memory at " << dram_offset << endl;
+                Verilated::gotFinish(true);
+            } else if (r_addr > (dram_offset + ramsize - 64)) {
+                cerr << "Invalid 64-byte read, address " << std::hex << r_addr << " is beyond end of memory at " << ramsize << endl;
+                Verilated::gotFinish(true);
+            } else if (addr_to_tag.find(r_addr)!=addr_to_tag.end()) {
+                cerr << "Access for " << std::hex << r_addr << " already outstanding.  Ignoring..." << endl;
+            } else {
+                assert(willAcceptTransaction(r_addr)); // if this gets triggered, need to rethink AXI "ready" signal strategy
+                assert(
+                        dramsim->addTransaction(false, r_addr - dram_offset)
+                      );
+                addr_to_tag[r_addr] = make_pair(top->m_axi_araddr, top->m_axi_arid);
+            }
         }
     }
 
@@ -181,30 +178,27 @@ void System::tick(int clk) {
         } else if (full_system && top->m_axi_awaddr >= UART_LITE_BASE && top->m_axi_awaddr < UART_LITE_BASE+0x1000) { /* UART Lite */
             w_addr = top->m_axi_awaddr;
             w_count = 1;
-        } else if (top->m_axi_awlen+1 != 8) {
-            cerr << "Write request with length != 8 (" << std::dec << top->m_axi_awlen << "+1)" << endl;
-            Verilated::gotFinish(true);
-        } else if (w_addr < dram_offset) {
-            cerr << "Invalid 64-byte write, address " << std::hex << w_addr << " is before the start of memory at " << dram_offset << endl;
-            Verilated::gotFinish(true);
-        } else if (w_addr > (dram_offset + ramsize - 64)) {
-            cerr << "Invalid 64-byte write, address " << std::hex << w_addr << " is beyond end of memory at " << ramsize << endl;
-            Verilated::gotFinish(true);
-        } else if (w_addr < dram_offset) {
-            cerr << "Invalid 64-byte access, address " << std::hex << w_addr << " is before the start of memory at " << dram_offset << endl;
-            Verilated::gotFinish(true);
-        } else if (addr_to_tag.find(w_addr)!=addr_to_tag.end()) {
-            cerr << "Access for " << std::hex << w_addr << " already outstanding.  Ignoring..." << endl;
-            w_addr = top->m_axi_awaddr & ~0x3fULL;
-            w_count = 8;
         } else {
             w_addr = top->m_axi_awaddr & ~0x3fULL;
             w_count = 8;
-            assert(willAcceptTransaction(w_addr)); // if this gets triggered, need to rethink AXI "ready" signal strategy
-            assert(
-                    dramsim->addTransaction(true, w_addr - dram_offset)
-                  );
-            addr_to_tag[w_addr] = make_pair(top->m_axi_awaddr, top->m_axi_awid);
+            if (top->m_axi_awlen+1 != 8) {
+                cerr << "Write request with length != 8 (" << std::dec << top->m_axi_awlen << "+1)" << endl;
+                Verilated::gotFinish(true);
+            } else if (w_addr < dram_offset) {
+                cerr << "Invalid 64-byte write, address " << std::hex << w_addr << " is before the start of memory at " << dram_offset << endl;
+                Verilated::gotFinish(true);
+            } else if (w_addr > (dram_offset + ramsize - 64)) {
+                cerr << "Invalid 64-byte write, address " << std::hex << w_addr << " is beyond end of memory at " << ramsize << endl;
+                Verilated::gotFinish(true);
+            } else if (addr_to_tag.find(w_addr)!=addr_to_tag.end()) {
+                cerr << "Access for " << std::hex << w_addr << " already outstanding.  Ignoring..." << endl;
+            } else {
+                assert(willAcceptTransaction(w_addr)); // if this gets triggered, need to rethink AXI "ready" signal strategy
+                assert(
+                        dramsim->addTransaction(true, w_addr - dram_offset)
+                      );
+                addr_to_tag[w_addr] = make_pair(top->m_axi_awaddr, top->m_axi_awid);
+            }
         }
     }
 
