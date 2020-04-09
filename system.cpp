@@ -131,7 +131,7 @@ void System::tick(int clk) {
         if (top->m_axi_arburst != 2) {
             cerr << "Read request with non-wrap burst (" << std::dec << top->m_axi_arburst << ") unsupported" << endl;
             Verilated::gotFinish(true);
-        } else if (full_system) {
+        } else if (full_system && top->m_axi_araddr < DRAM_OFFSET) {
             if (top->m_axi_araddr >= UART_LITE_BASE && top->m_axi_araddr < UART_LITE_BASE+0x1000) { /* UART Lite */
                 if (top->m_axi_araddr == UART_LITE_BASE + 4*UART_LITE_STAT_REG) {
                     r_queue.push_back(make_pair(0, make_pair(top->m_axi_arid, 1)));
@@ -178,14 +178,14 @@ void System::tick(int clk) {
         if (top->m_axi_awburst != 1) {
             cerr << "Write request with non-incr burst (" << std::dec << top->m_axi_awburst << ") unsupported" << endl;
             Verilated::gotFinish(true);
-        } else if (full_system) {
-          if (top->m_axi_awaddr >= UART_LITE_BASE && top->m_axi_awaddr < UART_LITE_BASE+0x1000) { /* UART Lite */
-            w_addr = top->m_axi_awaddr;
-            w_count = 1;
-          } else if (top->m_axi_awaddr >= CLINT_BASE && top->m_axi_awaddr < CLINT_BASE+0x1000) { /* CLINT */
-            w_addr = top->m_axi_awaddr;
-            w_count = 1;
-          }
+        } else if (full_system && top->m_axi_awaddr < DRAM_OFFSET) {
+            if (top->m_axi_awaddr >= UART_LITE_BASE && top->m_axi_awaddr < UART_LITE_BASE+0x1000) { /* UART Lite */
+                w_addr = top->m_axi_awaddr;
+                w_count = 1;
+            } else if (top->m_axi_awaddr >= CLINT_BASE && top->m_axi_awaddr < CLINT_BASE+0x1000) { /* CLINT */
+                w_addr = top->m_axi_awaddr;
+                w_count = 1;
+            }
         } else {
             w_addr = top->m_axi_awaddr & ~0x3fULL;
             w_count = 8;
@@ -211,7 +211,7 @@ void System::tick(int clk) {
     }
 
     if (top->m_axi_wvalid && w_count) {
-        if (full_system) {
+        if (full_system && w_addr < DRAM_OFFSET) {
             if (w_addr >= UART_LITE_BASE && w_addr < UART_LITE_BASE+0x1000) { /* UART Lite */
                 if (top->m_axi_wstrb == 0xF0) w_addr += 4;
                 else if (top->m_axi_wstrb == 0x0F) { /* do nothing */ }
