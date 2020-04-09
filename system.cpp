@@ -177,11 +177,6 @@ void System::tick(int clk) {
             Verilated::gotFinish(true);
         } else if (full_system && top->m_axi_awaddr >= UART_LITE_BASE && top->m_axi_awaddr < UART_LITE_BASE+0x1000) { /* UART Lite */
             w_addr = top->m_axi_awaddr;
-            if (top->m_axi_wstrb == 0xF0) w_addr + 4;
-            else if (top->m_axi_wstrb != 0) {
-                cerr << "Write request with unsupported strobe value (" << std::dec << top->m_axi_wstrb << ")" << endl;
-                Verilated::gotFinish(true);
-            }
             w_count = 1;
         } else {
             w_addr = top->m_axi_awaddr & ~0x3fULL;
@@ -209,16 +204,21 @@ void System::tick(int clk) {
 
     if (top->m_axi_wvalid && w_count) {
         if (full_system && w_addr >= UART_LITE_BASE && w_addr < UART_LITE_BASE+0x1000) { /* UART Lite */
-          if (w_addr == UART_LITE_BASE + 4*UART_LITE_REG_TXFIFO) cout << (char)(top->m_axi_wdata >> 56) << std::flush;
-          if (w_addr == UART_LITE_BASE + 4*UART_LITE_CTRL_REG) { /* do nothing */ }
-          else {
-              cerr << "Write request of uart_lite address (" << std::hex << w_addr << ") unsupported" << endl;
-              Verilated::gotFinish(true);
-          }
+            if (top->m_axi_wstrb == 0xF0) w_addr + 4;
+            else if (top->m_axi_wstrb != 0) {
+                cerr << "Write request with unsupported strobe value (" << std::dec << top->m_axi_wstrb << ")" << endl;
+                Verilated::gotFinish(true);
+            }
+            if (w_addr == UART_LITE_BASE + 4*UART_LITE_REG_TXFIFO) cout << (char)(top->m_axi_wdata >> 56) << std::flush;
+            if (w_addr == UART_LITE_BASE + 4*UART_LITE_CTRL_REG) { /* do nothing */ }
+            else {
+                cerr << "Write request of uart_lite address (" << std::hex << w_addr << ") unsupported" << endl;
+                Verilated::gotFinish(true);
+            }
         } else {
-          // if transfer is in progress, can't change mind about willAcceptTransaction()
-          assert(willAcceptTransaction(w_addr));
-          *((uint64_t*)(&ram[w_addr - dram_offset + (8-w_count)*8])) = top->m_axi_wdata;
+            // if transfer is in progress, can't change mind about willAcceptTransaction()
+            assert(willAcceptTransaction(w_addr));
+            *((uint64_t*)(&ram[w_addr - dram_offset + (8-w_count)*8])) = top->m_axi_wdata;
         }
         if(--w_count == 0) assert(top->m_axi_wlast);
     }
