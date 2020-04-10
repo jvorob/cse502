@@ -20,12 +20,6 @@
 
 #define DRAM_OFFSET 0x80000000ULL
 
-#define UART_LITE_BASE 0x70BEEF00ULL
-enum { UART_LITE_REG_RXFIFO = 0, UART_LITE_REG_TXFIFO = 1, UART_LITE_STAT_REG = 2, UART_LITE_CTRL_REG = 3 };
-enum { UART_LITE_TX_FULL = 3, UART_LITE_RX_FULL = 1, UART_LITE_RX_VALID = 0 };
-
-#define CLINT_BASE 0x70AEEF00ULL
-
 typedef unsigned long __uint64_t;
 typedef __uint64_t uint64_t;
 typedef unsigned int __uint32_t;
@@ -50,8 +44,6 @@ class System {
     list<pair<uint64_t, pair<int, bool> > > r_queue;
     list<int> resp_queue;
     set<uint64_t> snoop_queue;
-    uint64_t w_addr;
-    int w_count;
     std::map<uint64_t, std::pair<uint64_t, int> > addr_to_tag;
 
     void dram_read_complete(unsigned id, uint64_t address, uint64_t clock_cycle);
@@ -74,6 +66,9 @@ public:
     uint64_t max_elf_addr, dram_offset;
     uint64_t ecall_brk;
 
+    uint64_t w_addr;
+    int w_count;
+
     uint64_t ticks;
     int ps_per_clock;
 
@@ -82,6 +77,7 @@ public:
     void set_errno(const int new_errno);
     void invalidate(const uint64_t phys_addr);
     uint64_t virt_to_phy(const uint64_t virt_addr);
+    void read_response(uint64_t addr, int tag, bool last);
 
     char* ram;
     uint64_t ramsize;

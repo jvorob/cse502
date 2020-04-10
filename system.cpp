@@ -13,6 +13,7 @@
 #include <ncurses.h>
 #include <set>
 #include "system.h"
+#include "hardware.h"
 #include "Vtop.h"
 
 #define STACK_PAGES     (100)
@@ -127,22 +128,13 @@ void System::tick(int clk) {
 
     dramsim->update();    
 
+    const Device* device;
     if (top->m_axi_arvalid) {
         if (top->m_axi_arburst != 2) {
             cerr << "Read request with non-wrap burst (" << std::dec << top->m_axi_arburst << ") unsupported" << endl;
             Verilated::gotFinish(true);
-        } else if (full_system && top->m_axi_araddr < DRAM_OFFSET) {
-            if (top->m_axi_araddr >= UART_LITE_BASE && top->m_axi_araddr < UART_LITE_BASE+0x1000) { /* UART Lite */
-                if (top->m_axi_araddr == UART_LITE_BASE + 4*UART_LITE_STAT_REG) {
-                    r_queue.push_back(make_pair(0, make_pair(top->m_axi_arid, 1)));
-                } else {
-                    cerr << "Read request of uart_lite address (" << std::hex << top->m_axi_araddr << ") unsupported" << endl;
-                    Verilated::gotFinish(true);
-                }
-            } else if (top->m_axi_araddr >= CLINT_BASE && top->m_axi_araddr < CLINT_BASE+0x1000) { /* CLINT */
-                cerr << "Read request of CLINT address (" << std::hex << w_addr << ") unsupported, but will return 0 and keep going" << endl;
-                r_queue.push_back(make_pair(0, make_pair(top->m_axi_arid, 1)));
-            }
+        } else if (full_system && (device = full_system_hardware_match(top->m_axi_araddr))) {
+            device->read(device, top);
         } else {
             uint64_t r_addr = top->m_axi_araddr & ~0x3fULL;
             if (r_addr < dram_offset) {
@@ -178,14 +170,8 @@ void System::tick(int clk) {
         if (top->m_axi_awburst != 1) {
             cerr << "Write request with non-incr burst (" << std::dec << top->m_axi_awburst << ") unsupported" << endl;
             Verilated::gotFinish(true);
-        } else if (full_system && top->m_axi_awaddr < DRAM_OFFSET) {
-            if (top->m_axi_awaddr >= UART_LITE_BASE && top->m_axi_awaddr < UART_LITE_BASE+0x1000) { /* UART Lite */
-                w_addr = top->m_axi_awaddr;
-                w_count = 1;
-            } else if (top->m_axi_awaddr >= CLINT_BASE && top->m_axi_awaddr < CLINT_BASE+0x1000) { /* CLINT */
-                w_addr = top->m_axi_awaddr;
-                w_count = 1;
-            }
+        } else if (full_system && (device = full_system_hardware_match(top->m_axi_awaddr))) {
+            device->write_addr(device, top);
         } else {
             w_addr = top->m_axi_awaddr & ~0x3fULL;
             w_count = 8;
@@ -211,23 +197,8 @@ void System::tick(int clk) {
     }
 
     if (top->m_axi_wvalid && w_count) {
-        if (full_system && w_addr < DRAM_OFFSET) {
-            if (w_addr >= UART_LITE_BASE && w_addr < UART_LITE_BASE+0x1000) { /* UART Lite */
-                if (top->m_axi_wstrb == 0xF0) w_addr += 4;
-                else if (top->m_axi_wstrb == 0x0F) { /* do nothing */ }
-                else {
-                    cerr << "Write request with unsupported strobe value (" << std::hex << (int)(top->m_axi_wstrb) << ")" << endl;
-                    Verilated::gotFinish(true);
-                }
-                if (w_addr == UART_LITE_BASE + 4*UART_LITE_REG_TXFIFO) cout << (char)(top->m_axi_wdata >> 32) << std::flush;
-                else if (w_addr == UART_LITE_BASE + 4*UART_LITE_CTRL_REG) { /* do nothing */ }
-                else {
-                    cerr << "Write request of uart_lite address (" << std::hex << w_addr << ") unsupported" << endl;
-                    Verilated::gotFinish(true);
-                }
-            } else if (w_addr >= CLINT_BASE && w_addr < CLINT_BASE+0x1000) { /* CLINT */
-                cerr << "Write request of CLINT address (" << std::hex << w_addr << ") unsupported, but will keep going anyway" << endl;
-            }
+        if (full_system && (device = full_system_hardware_match(top->m_axi_awaddr))) {
+            device->write_data(device, top);
         } else {
             // if transfer is in progress, can't change mind about willAcceptTransaction()
             assert(willAcceptTransaction(w_addr));
@@ -250,12 +221,16 @@ void System::tick(int clk) {
     }
 }
 
+void System::read_response(uint64_t addr, int tag, bool last) {
+    r_queue.push_back(make_pair(addr, make_pair(tag, last)));
+}
+
 void System::dram_read_complete(unsigned id, uint64_t address, uint64_t clock_cycle) {
     map<uint64_t, pair<uint64_t, int> >::iterator tag = addr_to_tag.find(address + dram_offset);
     assert(tag != addr_to_tag.end());
     uint64_t orig_addr = tag->second.first;
     for(int i = 0; i < 64; i += 8)
-        r_queue.push_back(make_pair(*((uint64_t*)(&ram[((orig_addr&(~63))+((orig_addr+i)&63)) - dram_offset])),make_pair(tag->second.second,i+8>=64)));
+        read_response(*((uint64_t*)(&ram[((orig_addr&(~63))+((orig_addr+i)&63)) - dram_offset])), tag->second.second, i+8>=64);
     addr_to_tag.erase(tag);
 }
 
