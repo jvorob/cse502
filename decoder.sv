@@ -93,7 +93,7 @@ module Decoder
     assign succ   = inst[23:20];
 
 
-    always_comb @(inst) begin
+    always_comb begin
         Opcode op_code = inst[6:0];
 
         // === SET DEFAULT VALUES FOR THESE:
@@ -280,7 +280,8 @@ module Decoder
                         end
                         else if (immed_I[0] == 1) begin
                             // ebreak
-                            $display("ebreak");
+                            // $display("ebreak, inst=%x, pc=%x", inst, pc);
+                            // $finish;
 						end
                         else begin
                             $display("Invalid instruction for opcode=OP_SYSTEM and funct3=F3_ECALL_EBREAK.");

@@ -88,7 +88,7 @@ module Dcache
     reg line_dirty [SETS][WAYS];
     reg [LRU_LEN-1:0] line_lru [SETS];
     
-    reg [2:0] state;
+    reg [3:0] state;
     reg [63:0] rplc_addr;
     reg [LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_WORD_LEN] rplc_offset;
     wire [LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN] rplc_index = rplc_addr[LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN];
