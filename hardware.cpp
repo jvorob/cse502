@@ -16,12 +16,12 @@ void write_one(const Device* self, Vtop* top) {
 }
 
 void clint_read(const Device* self, Vtop* top) {
-    cerr << "Read request of CLINT address (" << std::hex << System::sys->w_addr << ") unsupported, but will return 0 and keep going" << endl;
+    //cerr << "Read request of CLINT address (" << std::hex << System::sys->w_addr << ") unsupported, but will return 0 and keep going" << endl;
     System::sys->read_response(0, top->m_axi_arid, true);
 }
 
 void clint_write_data(const Device* self, Vtop* top) {
-    cerr << "Write request of CLINT address (" << std::hex << System::sys->w_addr << ") unsupported, but will keep going anyway" << endl;
+    //cerr << "Write request of CLINT address (" << std::hex << System::sys->w_addr << ") unsupported, but will keep going anyway" << endl;
 }
 
 enum { UART_LITE_REG_RXFIFO = 0, UART_LITE_REG_TXFIFO = 1, UART_LITE_STAT_REG = 2, UART_LITE_CTRL_REG = 3 };
