@@ -4,6 +4,16 @@
 
 using namespace std;
 
+static uint64_t ticks_to_timer = 0;
+void rtc_tick(Vtop* top) {
+    if (ticks_to_timer == 1) top->hz32768timer = 1;
+    else if (ticks_to_timer == 0) {
+        top->hz32768timer = 1;
+        ticks_to_timer = 1000000000000ULL/32768/System::sys->ps_per_clock;
+    }
+    --ticks_to_timer;
+}
+
 void write_one(const Device* self, Vtop* top) {
     System::sys->w_addr = top->m_axi_awaddr;
     System::sys->w_count = 1;
@@ -16,15 +26,6 @@ void clint_read(const Device* self, Vtop* top) {
 
 void clint_write_data(const Device* self, Vtop* top) {
     //cerr << "Write request of CLINT address (" << std::hex << System::sys->w_addr << ") unsupported, but will keep going anyway" << endl;
-}
-
-static uint64_t ticks_to_timer = 0;
-void clint_tick(Vtop* top) {
-    if (ticks_to_timer == 0) {
-        ticks_to_timer = 1000000000000ULL/32768/System::sys->ps_per_clock;
-        top->timer_irq_i = 1;
-    }
-    --ticks_to_timer;
 }
 
 enum { UART_LITE_REG_RXFIFO = 0, UART_LITE_REG_TXFIFO = 1, UART_LITE_STAT_REG = 2, UART_LITE_CTRL_REG = 3 };

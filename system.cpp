@@ -125,7 +125,7 @@ void System::tick(int clk) {
         if (top->m_axi_acvalid && top->m_axi_acready) snoop_queue.erase(snoop_queue.begin());
         return;
     }
-    clint_tick(top);
+    rtc_tick(top);
 
     dramsim->update();    
 

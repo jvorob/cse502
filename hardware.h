@@ -3,6 +3,8 @@
 
 #include "Vtop.h"
 
+void rtc_tick(Vtop* top);
+
 struct Device {
   uint64_t start, size;
   void (*read)(const Device* self, Vtop* top);
@@ -10,7 +12,5 @@ struct Device {
   void (*write_data)(const Device* self, Vtop* top);
 };
 const Device* full_system_hardware_match(const uint64_t addr);
-
-void clint_tick(Vtop* top);
 
 #endif
