@@ -11,6 +11,10 @@ module top
   input  clk,
          reset,
 
+  input       timer_irq_i,
+              ipi_i,
+  input [1:0] irq_i,
+
   // 64-bit addresses of the program entry point and initial stack pointer
   input  [63:0] entry,
   input  [63:0] stackptr,

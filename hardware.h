@@ -11,4 +11,6 @@ struct Device {
 };
 const Device* full_system_hardware_match(const uint64_t addr);
 
+void clint_tick(Vtop* top);
+
 #endif
