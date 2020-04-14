@@ -197,7 +197,7 @@ void System::tick(int clk) {
     }
 
     if (top->m_axi_wvalid && w_count) {
-        if (full_system && (device = full_system_hardware_match(top->m_axi_awaddr))) {
+        if (full_system && (device = full_system_hardware_match(w_addr))) {
             device->write_data(device, top);
         } else {
             // if transfer is in progress, can't change mind about willAcceptTransaction()

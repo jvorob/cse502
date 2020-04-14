@@ -8,7 +8,7 @@ void write_one(const Device* self, Vtop* top) {
     System::sys->w_addr = top->m_axi_awaddr;
     System::sys->w_count = 1;
     if (top->m_axi_wstrb == 0xF0) System::sys->w_addr += 4;
-    else if (top->m_axi_wstrb == 0x0F) { /* do nothing */ }
+    else if (top->m_axi_wstrb == 0x0F || top->m_axi_wstrb == 0x00) { /* do nothing */ }
     else {
         cerr << "Write request with unsupported strobe value (" << std::hex << (int)(top->m_axi_wstrb) << ")" << endl;
         Verilated::gotFinish(true);
@@ -60,6 +60,6 @@ const struct Device devices[] = {
 
 const Device* full_system_hardware_match(const uint64_t addr) {
     for(const Device* d = devices; d < devices+sizeof(devices)/sizeof(Device); ++d)
-        if (addr <= d->start && addr < d->start + d->size) return d;
+        if (d->start <= addr && addr < d->start + d->size) return d;
     return NULL;
 }
