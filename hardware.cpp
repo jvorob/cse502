@@ -59,7 +59,7 @@ const struct Device devices[] = {
 };
 
 const Device* full_system_hardware_match(const uint64_t addr) {
-    for(const Device* d = devices; d < devices+sizeof(devices); ++d)
+    for(const Device* d = devices; d < devices+sizeof(devices)/sizeof(Device); ++d)
         if (addr <= d->start && addr < d->start + d->size) return d;
     return NULL;
 }
