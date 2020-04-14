@@ -46,6 +46,9 @@ void uart_lite_write_data(const Device* self, Vtop* top) {
         case UART_LITE_REG_TXFIFO:
             cout << (char)(top->m_axi_wdata >> 32) << std::flush;
             break;
+        case UART_LITE_CTRL_REG:
+            // do nothing
+            break;
         default:
             cerr << "Write request of uart_lite address (" << std::hex << System::sys->w_addr << "/" << offset << ") unsupported" << endl;
             Verilated::gotFinish(true);
