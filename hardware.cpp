@@ -7,12 +7,6 @@ using namespace std;
 void write_one(const Device* self, Vtop* top) {
     System::sys->w_addr = top->m_axi_awaddr;
     System::sys->w_count = 1;
-    if (top->m_axi_wstrb == 0xF0) System::sys->w_addr += 4;
-    else if (top->m_axi_wstrb == 0x0F || top->m_axi_wstrb == 0x00) { /* do nothing */ }
-    else {
-        cerr << "Write request with unsupported strobe value (" << std::hex << (int)(top->m_axi_wstrb) << ")" << endl;
-        Verilated::gotFinish(true);
-    }
 }
 
 void clint_read(const Device* self, Vtop* top) {
@@ -42,9 +36,18 @@ void uart_lite_read(const Device* self, Vtop* top) {
 
 void uart_lite_write_data(const Device* self, Vtop* top) {
     int offset = (System::sys->w_addr - self->start)/4;
+    if (top->m_axi_wstrb == 0xF0) offset += 1;
+    else if (top->m_axi_wstrb == 0x0F) { /* do nothing */ }
+    else {
+        cerr << "Write request with unsupported strobe value (" << std::hex << (int)(top->m_axi_wstrb) << ")" << endl;
+        Verilated::gotFinish(true);
+    }
     switch(offset) {
         case UART_LITE_REG_TXFIFO:
             cout << (char)(top->m_axi_wdata >> 32) << std::flush;
+            break;
+        case UART_LITE_CTRL_REG:
+            // do nothing
             break;
         default:
             cerr << "Write request of uart_lite address (" << std::hex << System::sys->w_addr << "/" << offset << ") unsupported" << endl;
