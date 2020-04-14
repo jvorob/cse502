@@ -57,8 +57,8 @@ void uart_lite_write_data(const Device* self, Vtop* top) {
 }
 
 const struct Device devices[] = {
-    { 0x70AEEF00ULL, 0x00001000, clint_read, write_one, clint_write_data },
-    { 0x70BEEF00ULL, 0x000c0000, uart_lite_read, write_one, uart_lite_write_data }
+    { 0x70AEEF00ULL, 0x000c0000, clint_read, write_one, clint_write_data },
+    { 0x70BEEF00ULL, 0x00010000, uart_lite_read, write_one, uart_lite_write_data }
 };
 
 const Device* full_system_hardware_match(const uint64_t addr) {
