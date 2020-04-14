@@ -34,7 +34,7 @@ void uart_lite_read(const Device* self, Vtop* top) {
             System::sys->read_response(0, top->m_axi_arid, true);
             break;
         default:
-            cerr << "Read request of uart_lite address (" << std::hex << top->m_axi_araddr << ") unsupported" << endl;
+            cerr << "Read request of uart_lite address (" << std::hex << top->m_axi_araddr << "/" << offset << ") unsupported" << endl;
             Verilated::gotFinish(true);
             break;
     }
@@ -47,7 +47,7 @@ void uart_lite_write_data(const Device* self, Vtop* top) {
             cout << (char)(top->m_axi_wdata >> 32) << std::flush;
             break;
         default:
-            cerr << "Write request of uart_lite address (" << std::hex << System::sys->w_addr << ") unsupported" << endl;
+            cerr << "Write request of uart_lite address (" << std::hex << System::sys->w_addr << "/" << offset << ") unsupported" << endl;
             Verilated::gotFinish(true);
             break;
     }
