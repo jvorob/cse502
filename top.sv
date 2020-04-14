@@ -91,6 +91,9 @@ module top
     logic flush_before_wb;	// Used for ecall
 	logic flush_before_ex;	// Used for jumps/branches
 
+    // csr register values
+    logic [63:0] mepc_csr;
+
     // ------------------------BEGIN IF STAGE--------------------------
     
 
@@ -272,8 +275,19 @@ module top
     logic [63:0] jump_target_address;
     logic do_jump;
 
-    // mask off bottommost bit of jump target: (according to RISCV spec)
-    assign jump_target_address = (EX_deco.jump_absolute ? alu_out : (EX_reg.curr_pc + EX_deco.immed)) & ~64'b1;
+    logic debug_is_mret;
+    assign debug_is_mret = EX_deco.is_mret;
+    always_comb begin
+        if (EX_deco.is_mret) begin
+            // mepc
+            jump_target_address = mepc_csr & ~64'b011;
+        end
+        else begin
+            // mask off bottommost bit of jump target: (according to RISCV spec)
+            jump_target_address = (EX_deco.jump_absolute ? alu_out : (EX_reg.curr_pc + EX_deco.immed)) & ~64'b1;
+        end
+    end
+
 
     //Deciding whether to jump
     always_comb begin
@@ -370,8 +384,9 @@ module top
         .csr_rw(MEM_reg.curr_deco.csr_rw),
         .csr_rs(MEM_reg.curr_deco.csr_rs),
         .csr_rc(MEM_reg.curr_deco.csr_rc),
-       
-        .csr_result(csr_result)
+         
+        .csr_result(csr_result),
+        .mepc_csr
     );
 
     MEM_Stage mem_stage(
@@ -451,7 +466,13 @@ module top
 
 		.ecall_stall(ecall_stall)
 	);
-
+/*
+    always_comb begin
+        if (WB_reg.valid) begin
+            $display("pc: %x", WB_reg.curr_pc);
+        end
+    end
+*/
     // ------------------------END WB STAGE-----------------------------
     
     // -------Modules outside of pipeline (e.g. hazard detection)-------

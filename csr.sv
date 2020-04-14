@@ -21,7 +21,10 @@ module Control_Status_Reg
     input csr_rs,       // Read set
     input csr_rc,       // Read clear
     
-    output [REG_WIDTH-1:0] csr_result // The value to be written to rd.
+    output [REG_WIDTH-1:0] csr_result, // The value to be written to rd.
+
+    output [REG_WIDTH-1:0] mepc_csr,
+    output [REG_WIDTH-1:0] satp_csr
 );
     logic [REG_WIDTH-1:0] csrs [0:CSR_COUNT-1]; // The CSR registers
 
@@ -32,6 +35,8 @@ module Control_Status_Reg
     assign lowest_priv = addr[CSR-3:CSR-4];
 
     assign csr_result = csrs[addr]; // Combinationally read CSRs
+    assign mepc_csr = csrs[mepc];
+    assign satp_csr = csrs[satp];
 
     always_ff @(posedge clk) begin
         if (reset) begin
@@ -53,5 +58,20 @@ module Control_Status_Reg
             end
         end
     end
+
+    logic [REG_WIDTH-1:0] mepc_debug;
+    logic [REG_WIDTH-1:0] satp_debug;
+/*
+    logic [REG_WIDTH-1:0] ;
+    logic [REG_WIDTH-1:0] ;
+    logic [REG_WIDTH-1:0] ;
+    logic [REG_WIDTH-1:0] ;
+    logic [REG_WIDTH-1:0] ;
+    logic [REG_WIDTH-1:0] ;
+*/
+    assign mepc_debug = csrs[mepc];
+    assign satp_debug = csrs[satp];
+
+
 endmodule
 

@@ -29,6 +29,45 @@ typedef enum bit[1:0] {
 } Jump_Code;
 
 
+typedef enum bit[11:0] {
+    // Supervisor Trap Setup
+    sstatus     = 12'h100,
+    sedeleg     = 12'h102,
+    sideleg     = 12'h103,
+    sie         = 12'h104,
+    stvec       = 12'h105,
+    scounteren  = 12'h106,
+
+    // Supervisor Trap Handling
+    sscratch    = 12'h140,
+    sepc        = 12'h141,
+    scause      = 12'h142,
+    stval       = 12'h143,
+    sip         = 12'h144,
+
+    // Supervisor Protection and Translation
+    satp        = 12'h180,
+
+    // Machine Information Registers
+    mhartid     = 12'hF14,
+
+    // Machine Trap Setup
+    mstatus     = 12'h300,
+    misa        = 12'h301,
+    medeleg     = 12'h302,
+    mideleg     = 12'h303,
+    mie         = 12'h304,
+    mtvec       = 12'h305,
+    mcounteren  = 12'h306,
+
+    // Machine Trap Handling
+    mscratch = 12'h340,
+    mepc     = 12'h341,
+    mcause   = 12'h342,
+    mtval    = 12'h343,
+    mip      = 12'h344
+} csr_names;
+
 // Register name mappings
 typedef enum bit[4:0] {
     ZERO = 5'd0,
@@ -208,7 +247,7 @@ typedef enum bit[2:0] {
 
 // Values of F3 for system instructions
 typedef enum bit[2:0] {
-    F3SYS_ECALL_EBREAK = 3'b000,
+    F3SYS_PRIV         = 3'b000, // These are privileged instructions (but also includes ecall and ebreak)
     F3SYS_CSRRW        = 3'b001,
     F3SYS_CSRRS        = 3'b010,
     F3SYS_CSRRC        = 3'b011,

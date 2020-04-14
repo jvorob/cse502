@@ -37,16 +37,26 @@ typedef struct packed {
     logic is_store;
 	logic is_load;
 
-    // - MISC_MEM: ??? TODO
-    // - SYSTEM: ??? TODO
-    logic is_ecall;
-    
     // CSR
     logic is_csr;
     logic csr_rw; // read write
     logic csr_rs; // read set
     logic csr_rc; // read clear
     logic csr_immed; // csr immediate instruction
+
+    // System
+    logic is_ecall;
+    logic is_break;     // Not currently used, remove this comment if this is eventually used
+
+    // Privileged Instructions
+    logic is_uret;
+    logic is_sret;
+    logic is_mret;
+    logic is_wfi;
+    //logic is_sfence_vma;
+    //logic is_hfence_bvma;
+    //logic is_hfence_gvma;
+
 
     logic alu_nop; // Don't do anything in the ALU. Pass rs1 through as the alu result.
 
@@ -80,12 +90,14 @@ module Decoder
 
     // internal instruction fragments
     logic [2:0] funct3;
+    logic [6:0] funct7;
     logic [5:0] shamt ;
     logic [11:0] csr  ;
     logic [4:0] zimm  ;
     logic [3:0] pred  ;
     logic [3:0] succ  ;
     assign funct3 = inst[14:12];
+    assign funct7 = inst[31:25];
     assign shamt  = inst[25:20];
     assign csr    = inst[31:20];
     assign zimm   = inst[19:15];
@@ -101,6 +113,7 @@ module Decoder
         out.rs1    = inst[19:15];
         out.rs2    = inst[24:20];
         out.rd     = inst[11: 7];
+        { out.en_rs1, out.en_rs2, out.en_rd } = 3'b000;
 
         out.funct3 = inst[14:12]; //TODO: override these for certain instructions
         out.funct7 = inst[31:25]; // branches, adds, etc
@@ -126,6 +139,11 @@ module Decoder
         out.csr_rc = 0;
 
         out.alu_nop = 0;
+
+        out.is_uret = 0;
+        out.is_sret = 0;
+        out.is_mret = 0;
+        out.is_wfi = 0;
 
         // === MAIN DECODER:
         // Determine immediate values, and which of rs1,rs2,and rd we're using
@@ -269,8 +287,22 @@ module Decoder
                 { out.en_rs1, out.en_rs2, out.en_rd } = 3'b000;
                 
                 case (funct3) inside
-                    F3SYS_ECALL_EBREAK: begin
-                        if (immed_I[0] == 0) begin
+                    F3SYS_PRIV: begin
+                        /*
+                        0000000 00000 00000 000 00000 1110011 ECALL
+                        0000000 00001 00000 000 00000 1110011 EBREAK
+
+                        0000000 00010 00000 000 00000 1110011 URET
+                        0001000 00010 00000 000 00000 1110011 SRET
+                        0011000 00010 00000 000 00000 1110011 MRET
+
+                        0001000 00101 00000 000 00000 1110011 WFI
+                        0001001 rs2   rs1   000 00000 1110011 SFENCE.VMA
+
+                        0010001 rs2   rs1   000 00000 1110011 HFENCE.BVMA
+                        1010001 rs2   rs1   000 00000 1110011 HFENCE.GVMA
+                        */
+                        if (immed_I == 0) begin
                             out.is_ecall = 1;
                             
                             // As specified for the fake-os hack, write ecall() returned results to
@@ -278,11 +310,39 @@ module Decoder
                             out.en_rd = 1;
                             out.rd = A0;
                         end
-                        else if (immed_I[0] == 1) begin
+                        else if (immed_I == 1) begin
                             // ebreak
                             // $display("ebreak, inst=%x, pc=%x", inst, pc);
                             // $finish;
 						end
+                        else if (immed_I == 12'b010) begin
+                            // URET
+                            out.is_uret = 1;
+                        end
+                        else if (immed_I == 12'b0001_0000_0010) begin
+                            // SRET
+                            out.is_sret = 1;
+                        end
+                        else if (immed_I == 12'b0011_0000_0010) begin
+                            // MRET
+                            out.is_mret = 1;
+                            out.jump_if = JUMP_YES;
+                            $display("mret, inst=%x, pc=%x", inst, pc);
+                        end
+                        else if (immed_I == 12'b0001_0000_0101) begin
+                            // WFI
+                            out.is_wfi = 1;
+                            $display("wfi, inst=%x, pc=%x", inst, pc);
+                        end
+                        else if (funct7 == 7'b000_1001) begin
+                            $display("sfence.vma, inst=%x, pc=%x", inst, pc);
+                        end
+                        else if (funct7 == 7'b001_0001) begin
+                            $display("hfence.bvma, inst=%x, pc=%x", inst, pc);
+                        end
+                        else if (funct7 == 7'b101_0001) begin
+                            $display("hfence.gvma, inst=%x, pc=%x", inst, pc);
+                        end
                         else begin
                             $display("Invalid instruction for opcode=OP_SYSTEM and funct3=F3_ECALL_EBREAK.");
                         end

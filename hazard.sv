@@ -72,7 +72,10 @@ module hazard_unit(
             id_stall = 0;
         end
         else begin
-            if ( wb_valid && wb_en_rd && ((wb_rd == id_rs1 && id_en_rs1) || (wb_rd == id_rs2 && id_en_rs2)) ) begin 
+            if (ID_deco.is_mret && (ex_valid || mem_valid || wb_valid)) begin
+                id_stall = 1;
+            end
+            else if ( wb_valid && wb_en_rd && ((wb_rd == id_rs1 && id_en_rs1) || (wb_rd == id_rs2 && id_en_rs2)) ) begin 
                 id_stall = 1;
             end
             else if ( mem_valid && mem_en_rd && ((mem_rd == id_rs1 && id_en_rs1) || (mem_rd == id_rs2 && id_en_rs2)) ) begin
