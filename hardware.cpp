@@ -46,9 +46,7 @@ void uart_lite_read(const Device* self, Vtop* top) {
 
 void uart_lite_write_data(const Device* self, Vtop* top) {
     int offset = (System::sys->w_addr - self->start)/4;
-    if (top->m_axi_wstrb == 0xF0) offset += 1;
-    else if (top->m_axi_wstrb == 0x0F) { /* do nothing */ }
-    else {
+    if (top->m_axi_wstrb != 0x0F)  {
         cerr << "Write request with unsupported strobe value (" << std::hex << (int)(top->m_axi_wstrb) << ")" << endl;
         Verilated::gotFinish(true);
     }
