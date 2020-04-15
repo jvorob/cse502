@@ -7,10 +7,6 @@ using namespace std;
 void write_one(const Device* self, Vtop* top) {
     System::sys->w_addr = top->m_axi_awaddr;
     System::sys->w_count = 1;
-    if (top->m_axi_awsize != 2) {
-        cerr << "Write request with unsupported word size value (" << std::hex << (int)(top->m_axi_awsize) << ")" << endl;
-        Verilated::gotFinish(true);
-    }
 }
 
 void clint_read(const Device* self, Vtop* top) {
