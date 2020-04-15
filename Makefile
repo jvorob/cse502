@@ -1,7 +1,7 @@
 .PHONY: all run clean submit
 
 #PROG=/shared/cse502/tests/wp1/prog1.o
-PROG=/shared/cse502/tests/linux.bbl
+PROG=/shared/cse502/tests/bbl.bin
 
 TRACE?=--trace
 HAVETLB=n
