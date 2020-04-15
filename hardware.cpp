@@ -7,6 +7,10 @@ using namespace std;
 void write_one(const Device* self, Vtop* top) {
     System::sys->w_addr = top->m_axi_awaddr;
     System::sys->w_count = 1;
+    if (top->m_axi_awsize != 2) {
+        cerr << "Write request with unsupported word size value (" << std::hex << (int)(top->m_axi_awsize) << ")" << endl;
+        Verilated::gotFinish(true);
+    }
 }
 
 void clint_read(const Device* self, Vtop* top) {
@@ -36,9 +40,7 @@ void uart_lite_read(const Device* self, Vtop* top) {
 
 void uart_lite_write_data(const Device* self, Vtop* top) {
     int offset = (System::sys->w_addr - self->start)/4;
-    if (top->m_axi_wstrb == 0xF0) offset += 1;
-    else if (top->m_axi_wstrb == 0x0F) { /* do nothing */ }
-    else {
+    if (top->m_axi_wstrb != 0x0F) {
         cerr << "Write request with unsupported strobe value (" << std::hex << (int)(top->m_axi_wstrb) << ")" << endl;
         Verilated::gotFinish(true);
     }
