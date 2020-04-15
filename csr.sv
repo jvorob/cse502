@@ -24,7 +24,9 @@ module Control_Status_Reg
     output [REG_WIDTH-1:0] csr_result, // The value to be written to rd.
 
     output [REG_WIDTH-1:0] mepc_csr,
-    output [REG_WIDTH-1:0] satp_csr
+    output [REG_WIDTH-1:0] satp_csr,
+
+    output modifying_satp
 );
     logic [REG_WIDTH-1:0] csrs [0:CSR_COUNT-1]; // The CSR registers
 
@@ -37,6 +39,8 @@ module Control_Status_Reg
     assign csr_result = csrs[addr]; // Combinationally read CSRs
     assign mepc_csr = csrs[mepc];
     assign satp_csr = csrs[satp];
+
+    assign modifying_satp = valid && is_csr && (addr == satp);
 
     always_ff @(posedge clk) begin
         if (reset) begin

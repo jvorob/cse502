@@ -13,6 +13,7 @@ module traffic_control(
 
     // Flush all instructions in the pipeline behind the WB stage
     input flush_before_wb,
+    input flush_before_mem,
 	input flush_before_ex,
 
     // If stage_wr_en is also high, causes that stage to clock in a bubble (no instruction)
@@ -61,6 +62,14 @@ module traffic_control(
             ex_wr_en = 1;
             mem_wr_en = 1;
             // if wb_wr_en is set, it will inherit the bubble. Otherwise it can stall as normal
+        end
+        else if (flush_before_mem) begin
+            id_gen_bubble = 1;
+            ex_gen_bubble = 1;
+            mem_gen_bubble = 1;
+            
+            id_wr_en = 1;
+            ex_wr_en = 1;
         end
 		else if (flush_before_ex) begin
             // next contents of ID and EX registers, if any, will be bubbles

@@ -89,7 +89,8 @@ module top
 
 	// flush signals
     logic flush_before_wb;	// Used for ecall
-	logic flush_before_ex;	// Used for jumps/branches
+	logic flush_before_mem; // Currently used upon satp modification (in case virtual memory is toggled). Can be used for other things.
+    logic flush_before_ex;	// Used for jumps/branches
 
     // csr register values
     logic [63:0] mepc_csr;
@@ -125,6 +126,13 @@ module top
 
                 // start after ECALL which is in WB (TODO: will be in WB?)
                 IF_pc <= WB_reg.curr_pc + 4;
+            end
+
+            else if (flush_before_mem) begin
+                if (!MEM_reg.valid) $error ("ERROR: flush_before_mem expects inst in MEM, found bubble");
+
+                // start after instruction in MEM
+                IF_pc <= MEM_reg.curr_pc + 4;
             end
 
             // (JUMP: change pc to jump_target)
@@ -386,7 +394,9 @@ module top
         .csr_rc(MEM_reg.curr_deco.csr_rc),
          
         .csr_result(csr_result),
-        .mepc_csr
+        .mepc_csr,
+        
+        .modifying_satp(flush_before_mem)
     );
 
     MEM_Stage mem_stage(
@@ -525,6 +535,7 @@ module top
         .wb_valid (WB_reg.valid),
 
         .flush_before_wb(flush_before_wb),
+        .flush_before_mem(flush_before_mem),
 		.flush_before_ex(flush_before_ex),
 
         // Output gen bubbles
@@ -542,13 +553,20 @@ module top
         .wb_wr_en(wb_wr_en)
     );
 
+    logic vm_en;
+    always_comb begin
+        if (CSRs.mepc_csr[63:60] == 9)
+            vm_en = 1;
+        else
+            vm_en = 0;
+    end
 
     // ===== Icache and Dcache access is all routed into here
     MemorySystem #( ID_WIDTH, ADDR_WIDTH, DATA_WIDTH, STRB_WIDTH) mem_sys(
         .clk,
         .reset,
         .satp,    //TODO: for now is value from HAVETLB, later will be from CSR
-        .virtual_en(0),  //leave virtual memory disabled for now
+        .virtual_en(vm_en),  //leave virtual memory disabled for now
 
         //I$ ports
         .ic_req_addr(mem_sys_ic_req_addr),  // this is assigned from a signal since it's an input
