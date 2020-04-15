@@ -137,6 +137,7 @@ module Decoder
         out.csr_rw = 0;
         out.csr_rs = 0;
         out.csr_rc = 0;
+        out.csr_immed = 0;
 
         out.alu_nop = 0;
 

@@ -42,7 +42,7 @@ void uart_lite_write_data(const Device* self, Vtop* top) {
     }
     switch(offset) {
         case UART_LITE_REG_TXFIFO:
-            cout << (char)(top->m_axi_wdata >> 32) << std::flush;
+            cout << (char)(top->m_axi_wdata) << std::flush;
             break;
         case UART_LITE_CTRL_REG:
             // do nothing
