@@ -30,9 +30,9 @@ module Dcache
 
     // AXI interface
     output  reg  [ID_WIDTH-1:0]     dcache_m_axi_awid,
-    output  wire [ADDR_WIDTH-1:0]   dcache_m_axi_awaddr,
+    output  reg  [ADDR_WIDTH-1:0]   dcache_m_axi_awaddr,
     output  wire [7:0]              dcache_m_axi_awlen,
-    output  reg  [2:0]              dcache_m_axi_awsize,
+    output  wire [2:0]              dcache_m_axi_awsize,
     output  reg  [1:0]              dcache_m_axi_awburst,
     output  reg                     dcache_m_axi_awlock,
     output  reg  [3:0]              dcache_m_axi_awcache,
@@ -49,9 +49,9 @@ module Dcache
     input   wire                    dcache_m_axi_bvalid,
     output  reg                     dcache_m_axi_bready,
     output  reg  [ID_WIDTH-1:0]     dcache_m_axi_arid,
-    output  wire [ADDR_WIDTH-1:0]   dcache_m_axi_araddr,
+    output  reg  [ADDR_WIDTH-1:0]   dcache_m_axi_araddr,
     output  wire [7:0]              dcache_m_axi_arlen,
-    output  reg  [2:0]              dcache_m_axi_arsize,
+    output  wire [2:0]              dcache_m_axi_arsize,
     output  reg  [1:0]              dcache_m_axi_arburst,
     output  reg                     dcache_m_axi_arlock,
     output  reg  [3:0]              dcache_m_axi_arcache,
@@ -115,13 +115,41 @@ module Dcache
             dcache_m_axi_wstrb = 8'hff;
         else if (state == 4'h6)
             case(wlen)
-            2'h0: dcache_m_axi_wstrb = 8'h01 << addr[LOG_WORD_LEN-1:0];
-            2'h1: dcache_m_axi_wstrb = 8'h03 << 2*addr[LOG_WORD_LEN-1:1];
-            2'h2: dcache_m_axi_wstrb = 8'h0f << 4*addr[LOG_WORD_LEN-1];
+            2'h0: dcache_m_axi_wstrb = 8'h01;
+            2'h1: dcache_m_axi_wstrb = 8'h03;
+            2'h2: dcache_m_axi_wstrb = 8'h0f;
             2'h3: dcache_m_axi_wstrb = 8'hff;
             endcase
         else
             dcache_m_axi_wstrb = 8'h00;
+    end
+
+    always_comb begin
+        if (state == 4'h3)
+            dcache_m_axi_araddr = rplc_addr[ADDR_WIDTH-1:LOG_WORD_LEN] << LOG_WORD_LEN;
+        else if (state == 4'h7)
+            case(wlen)
+            2'h0: dcache_m_axi_araddr = rplc_addr[ADDR_WIDTH-1:0];
+            2'h1: dcache_m_axi_araddr = rplc_addr[ADDR_WIDTH-1:1] << 1;
+            2'h2: dcache_m_axi_araddr = rplc_addr[ADDR_WIDTH-1:2] << 2;
+            2'h3: dcache_m_axi_araddr = rplc_addr[ADDR_WIDTH-1:3] << 3;
+            endcase
+        else
+            dcache_m_axi_araddr = 0;
+    end
+
+    always_comb begin
+        if (state == 4'h1)
+            dcache_m_axi_awaddr = {line_tag[rplc_index][rplc_way], rplc_index} << (LOG_LINE_LEN + LOG_WORD_LEN);
+        else if (state == 4'h5)
+            case(wlen)
+            2'h0: dcache_m_axi_awaddr = rplc_addr[ADDR_WIDTH-1:0];
+            2'h1: dcache_m_axi_awaddr = rplc_addr[ADDR_WIDTH-1:1] << 1;
+            2'h2: dcache_m_axi_awaddr = rplc_addr[ADDR_WIDTH-1:2] << 2;
+            2'h3: dcache_m_axi_awaddr = rplc_addr[ADDR_WIDTH-1:3] << 3;
+            endcase
+        else
+            dcache_m_axi_awaddr = 0;
     end
 
     integer way;
@@ -154,8 +182,6 @@ module Dcache
             line_lru[index] <= new_lru(line_lru[index], mru);
     end
 
-    assign dcache_m_axi_araddr = {rplc_addr[ADDR_WIDTH-1:LOG_WORD_LEN], {LOG_WORD_LEN{1'b0}}};
-    assign dcache_m_axi_awaddr = (state == 4'h1) ? {line_tag[rplc_index][rplc_way], rplc_index, {LOG_LINE_LEN{1'b0}}, {LOG_WORD_LEN{1'b0}}} : (state == 4'h5) ? {rplc_addr[ADDR_WIDTH-1:LOG_WORD_LEN], {LOG_WORD_LEN{1'b0}}} : 0;
     assign dcache_m_axi_wdata = (state == 4'h2) ? mem[rplc_index][rplc_way][rplc_offset] : (state == 4'h6) ? IO_reg : 0;
     assign dcache_m_axi_acready = state == 4'h0;
     assign dcache_m_axi_awvalid = (state == 4'h1) || (state == 4'h5);
@@ -165,6 +191,8 @@ module Dcache
     assign dcache_m_axi_wlast = (state == 4'h2) ? (rplc_offset == {LOG_LINE_LEN{1'b1}}) : (state == 4'h6) ? 1'b1 : 1'b0;
     assign dcache_m_axi_awlen = (state == 4'h1) ? 8'h7 : (state == 4'h5) ? 8'h0 : 8'h0;  // +1 words requested
     assign dcache_m_axi_arlen = (state == 4'h3) ? 8'h7 : (state == 4'h7) ? 8'h0 : 8'h0;  // +1 words requested
+    assign dcache_m_axi_awsize = (state == 4'h1) ? 3'h3 : (state == 4'h5) ? wlen : 3'h0;
+    assign dcache_m_axi_arsize = (state == 4'h3) ? 3'h3 : (state == 4'h7) ? wlen : 3'h0;
 
     always_ff @ (posedge clk) begin
         if (reset) begin
@@ -175,13 +203,11 @@ module Dcache
             IO_reg <= 0;
             
             dcache_m_axi_arid <= 1;      // transaction id
-            dcache_m_axi_arsize <= 3'h3; // 2^3, word width is 8 bytes
             dcache_m_axi_arburst <= 2'h2;// 2 in enum, bursttype=wrap
             dcache_m_axi_arlock <= 1'b0; // no lock
             dcache_m_axi_arcache <= 4'h0;// no cache
             dcache_m_axi_arprot <= 3'h6; // enum, means something
             dcache_m_axi_awid <= 1;      // transaction id
-            dcache_m_axi_awsize <= 3'h3; // 2^3, word width is 8 bytes
             dcache_m_axi_awburst <= 2'h1;// 1 in enum, bursttype=incr
             dcache_m_axi_awlock <= 1'b0; // no lock
             dcache_m_axi_awcache <= 4'h0;// no cache
@@ -200,12 +226,7 @@ module Dcache
                     rplc_addr <= addr;
                     if(isIO) begin
                         if(wrn) begin // IO write
-                            case(wlen)
-                            2'h0: IO_reg <= wdata << 8*addr[LOG_WORD_LEN-1:0];
-                            2'h1: IO_reg <= wdata << 16*addr[LOG_WORD_LEN-1:1];
-                            2'h2: IO_reg <= wdata << 32*addr[LOG_WORD_LEN-1];
-                            2'h3: IO_reg <= wdata;
-                            endcase
+                            IO_reg <= wdata;
                             state <= 4'h5;
                         end else // IO read
                             state <= 4'h7;
