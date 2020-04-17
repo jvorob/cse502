@@ -31,41 +31,41 @@ typedef enum bit[1:0] {
 
 typedef enum bit[11:0] {
     // Supervisor Trap Setup
-    sstatus     = 12'h100,
-    sedeleg     = 12'h102,
-    sideleg     = 12'h103,
-    sie         = 12'h104,
-    stvec       = 12'h105,
-    scounteren  = 12'h106,
+    CSR_SSTATUS     = 12'h100,
+    CSR_SEDELEG     = 12'h102,
+    CSR_SIDELEG     = 12'h103,
+    CSR_SIE         = 12'h104,
+    CSR_STVEC       = 12'h105,
+    CSR_SCOUNTEREN  = 12'h106,
 
     // Supervisor Trap Handling
-    sscratch    = 12'h140,
-    sepc        = 12'h141,
-    scause      = 12'h142,
-    stval       = 12'h143,
-    sip         = 12'h144,
+    CSR_SSCRATCH    = 12'h140,
+    CSR_SEPC        = 12'h141,
+    CSR_SCAUSE      = 12'h142,
+    CSR_STVAL       = 12'h143,
+    CSR_SIP         = 12'h144,
 
     // Supervisor Protection and Translation
-    satp        = 12'h180,
+    CSR_SATP        = 12'h180,
 
     // Machine Information Registers
-    mhartid     = 12'hF14,
+    CSR_MHARTID     = 12'hF14,
 
     // Machine Trap Setup
-    mstatus     = 12'h300,
-    misa        = 12'h301,
-    medeleg     = 12'h302,
-    mideleg     = 12'h303,
-    mie         = 12'h304,
-    mtvec       = 12'h305,
-    mcounteren  = 12'h306,
+    CSR_MSTATUS     = 12'h300,
+    CSR_MISA        = 12'h301,
+    CSR_MEDELEG     = 12'h302,
+    CSR_MIDELEG     = 12'h303,
+    CSR_MIE         = 12'h304,
+    CSR_MTVEC       = 12'h305,
+    CSR_MCOUNTEREN  = 12'h306,
 
     // Machine Trap Handling
-    mscratch = 12'h340,
-    mepc     = 12'h341,
-    mcause   = 12'h342,
-    mtval    = 12'h343,
-    mip      = 12'h344
+    CSR_MSCRATCH = 12'h340,
+    CSR_MEPC     = 12'h341,
+    CSR_MCAUSE   = 12'h342,
+    CSR_MTVAL    = 12'h343,
+    CSR_MIP      = 12'h344
 } csr_names;
 
 // Register name mappings

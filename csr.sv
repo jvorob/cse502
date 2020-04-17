@@ -37,10 +37,10 @@ module Control_Status_Reg
     assign lowest_priv = addr[CSR-3:CSR-4];
 
     assign csr_result = csrs[addr]; // Combinationally read CSRs
-    assign mepc_csr = csrs[mepc];
-    assign satp_csr = csrs[satp];
+    assign mepc_csr = csrs[CSR_MEPC];
+    assign satp_csr = csrs[CSR_SATP];
 
-    assign modifying_satp = valid && is_csr && (addr == satp);
+    assign modifying_satp = valid && is_csr && (addr == CSR_SATP);
 
     always_ff @(posedge clk) begin
         if (reset) begin
@@ -62,19 +62,6 @@ module Control_Status_Reg
             end
         end
     end
-
-    logic [REG_WIDTH-1:0] mepc_debug;
-    logic [REG_WIDTH-1:0] satp_debug;
-/*
-    logic [REG_WIDTH-1:0] ;
-    logic [REG_WIDTH-1:0] ;
-    logic [REG_WIDTH-1:0] ;
-    logic [REG_WIDTH-1:0] ;
-    logic [REG_WIDTH-1:0] ;
-    logic [REG_WIDTH-1:0] ;
-*/
-    assign mepc_debug = csrs[mepc];
-    assign satp_debug = csrs[satp];
 
 
 endmodule
