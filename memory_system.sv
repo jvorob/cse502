@@ -18,8 +18,7 @@ module MemorySystem
     input clk,
     input reset,
     
-    input  logic        virtual_en, // 1 = enable virtual memory/TLB use (both for I/D cache)
-    input  logic [63:0] satp, //current value of SATP CSR (TODO TEMP: with havetlb hack, this is just an address)
+    input  logic [63:0] satp, //current value of SATP CSR
 
     //=== External I$ interface
     input  logic        ic_en,   //TODO: this is unused right now?
@@ -81,6 +80,32 @@ module MemorySystem
     input   wire [ADDR_WIDTH-1:0]  m_axi_acaddr,
     input   wire [3:0]             m_axi_acsnoop
 );
+
+
+    // === SATP decode
+    logic [3:0] satp_mode;
+    logic [15:0] satp_asid;
+    logic [43:0] satp_ppn;
+    assign {satp_mode, satp_asid, satp_ppn} = satp;
+
+    logic virtual_en;
+    logic [63:0] root_pt_addr;
+
+    // === Decode mode into virtual/physical/error
+    always_comb begin
+        virtual_en = 0;
+        case (satp_mode) inside
+            0: ; //physical mode
+            8: $error("SATP set to mode 8, 'Sv39', not supported");
+            9: virtual_en = 1; //Sv48
+            default: $error("SATP set to unsupported mode %d\n", satp_mode);
+        endcase
+    end
+
+    // === get pt address
+    // (ppn is actuall 44 bits, so top 2 bits get ignored, but that 
+    //  seems to be the intent of the spec)
+    assign root_pt_addr = { satp_ppn, 12'b0 };
 
 
     /* Structure overview:
@@ -248,7 +273,7 @@ module MemorySystem
         .dcache_resp_data (dcache.rdata),
 
         // ====== MISC
-        .root_pt_addr(satp) // Currently set by havetlb hack, later will be from csr
+        .root_pt_addr(root_pt_addr) // Currently set by havetlb hack, later will be from csr
     );
     
 

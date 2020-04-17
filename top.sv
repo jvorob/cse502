@@ -23,7 +23,7 @@ module top
   // 64-bit addresses of the program entry point and initial stack pointer
   input  [63:0] entry,
   input  [63:0] stackptr,
-  input  [63:0] satp,
+  input  [63:0] satp, // TODO: DON'T USE THIS!!! (comes from Mike's hacked satp,  now satp comes from CSR)
 
   // interface to connect to the bus
   output  wire [ID_WIDTH-1:0]    m_axi_awid,
@@ -114,7 +114,7 @@ module top
     // IF-stage PC logic
     always_ff @ (posedge clk) begin
         if (reset) begin
-            $display("satp: %x", satp);
+            //$display("satp: %x", satp); TODO: SATP now comes from CSR
             $display("Entry: %x", entry);
             IF_pc <= entry;
         end 
@@ -562,22 +562,13 @@ module top
         .wb_wr_en(wb_wr_en)
     );
 
-    logic vm_en;
-    always_comb begin
-        if (CSRs.satp_csr[63:60] == 9) begin
-            $display("Turning on VM");
-            vm_en = 1;
-        end
-        else
-            vm_en = 0;
-    end
 
     // ===== Icache and Dcache access is all routed into here
     MemorySystem #( ID_WIDTH, ADDR_WIDTH, DATA_WIDTH, STRB_WIDTH) mem_sys(
         .clk,
         .reset,
-        .satp,    //TODO: for now is value from HAVETLB, later will be from CSR
-        .virtual_en(vm_en),  //leave virtual memory disabled for now
+
+        .satp(CSRs.satp_csr),
 
         //I$ ports
         .ic_req_addr(mem_sys_ic_req_addr),  // this is assigned from a signal since it's an input

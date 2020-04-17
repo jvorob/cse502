@@ -41,7 +41,7 @@ module traffic_control(
         // IF can advance either through normal pipeline (!stall && next_wr_en)
         // or in case of a jump/pipeline-flush
         if_wr_en = (!if_stall && id_wr_en) ||
-                   (flush_before_wb || flush_before_ex); //in this case, IF_next_pc will also be changed
+                   (flush_before_ex || flush_before_mem || flush_before_wb); 
 
         wb_gen_bubble = mem_stall;
         mem_gen_bubble = ex_stall;
