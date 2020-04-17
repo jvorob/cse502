@@ -56,7 +56,6 @@ module MEM_Stage
             F3LS_H: mem_wr_data = ex_data2[15:0];
             F3LS_W: mem_wr_data = ex_data2[31:0];
             F3LS_D: mem_wr_data = ex_data2[63:0];
-            default: mem_wr_data = ex_data2[63:0];
         endcase
         
         // This only matters for loads
@@ -65,11 +64,16 @@ module MEM_Stage
             F3LS_B: mem_ex_rdata = { {56{mem_rdata_shifted[7]}}, mem_rdata_shifted[7:0] };
             F3LS_H: mem_ex_rdata = { {48{mem_rdata_shifted[15]}}, mem_rdata_shifted[15:0] };
             F3LS_W: mem_ex_rdata = { {32{mem_rdata_shifted[31]}}, mem_rdata_shifted[31:0] };
+            F3LS_D: mem_ex_rdata =  mem_rdata;
             // load unsign
             F3LS_BU: mem_ex_rdata = { 56'd0, mem_rdata_shifted[7:0] };
             F3LS_HU: mem_ex_rdata = { 48'd0, mem_rdata_shifted[15:0] };
             F3LS_WU: mem_ex_rdata = { 32'd0, mem_rdata_shifted[31:0] };
-            default: mem_ex_rdata = mem_rdata;
+            default: begin
+                mem_ex_rdata = 0;
+                if(!is_bubble && inst.is_load)
+                    $error("Unexpected funct3 in mem_stage load: %b\n", inst.funct3);
+            end
         endcase
 
         if (inst.is_atomic && !is_bubble) begin
