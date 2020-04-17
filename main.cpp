@@ -10,7 +10,7 @@
 #define RAM_SIZE                  (1*GIGA)
 #define INIT_STACK_OFFSET         (4*MEGA)
 #define INIT_STACK_POINTER        (RAM_SIZE - INIT_STACK_OFFSET)
-#define TRACE_WAIT                2.5 * GIGA //000 000 000
+#define TRACE_WAIT                0x330c00 // in cycles 
 
 /** Current simulation time */
 double sc_time_stamp() {
@@ -60,7 +60,7 @@ int main(int argc, char* argv[]) {
 	tfp->spTrace()->set_time_resolution("1 ps");
 	// Open the dump file
 	tfp->open ("../trace.vcd");
-#define TFP_DUMP if (tfp && sys.ticks > TRACE_WAIT) tfp->dump(sys.ticks);
+#define TFP_DUMP if (tfp && sys.ticks > ((TRACE_WAIT) * sys.ps_per_clock)) tfp->dump(sys.ticks);
 #else
 #define TFP_DUMP
 #endif

@@ -67,11 +67,22 @@ module top
   input   wire [3:0]             m_axi_acsnoop
 );
 
+    // ==== META-Logic and debugging signals
+
 	// This is used to let the instructions in the middle of the pipeline finish
 	// executing before we stop. This is because there might still be instructions in the
 	// pipeline partially executed after hitting the end of the program with IF_pc.
-    logic [2:0] termination_counter;
+    logic [2:0] dbg_termination_counter;
     
+    logic [63:0] dbg_tick_counter; //counts once per clock cycle
+    always_ff @ (posedge clk) begin
+        dbg_tick_counter <= dbg_tick_counter + 1;
+    end
+
+
+
+
+
 
     // Traffic controller signals:
     // gen_bubble
@@ -307,7 +318,7 @@ module top
 			JUMP_ALU_NEZ:	do_jump = (alu_out != 0);
         endcase
 		
-        if (termination_counter != 1) begin
+        if (dbg_termination_counter != 1) begin
     		flush_before_ex = do_jump;
         end
         else begin
@@ -488,7 +499,7 @@ module top
 
     always_comb begin
         if (WB_reg.valid && !ecall_stall && WB_reg.curr_do_jump) begin
-            $display("jump to %x, from %x", WB_reg.curr_jump_target, WB_reg.curr_pc);
+            $display("tick %x: jump to %x, from %x", dbg_tick_counter, WB_reg.curr_jump_target, WB_reg.curr_pc);
         end
     end
 
@@ -597,14 +608,14 @@ module top
     // ==== Termination counter logic:
     always_ff @ (posedge clk) begin
         if (reset) 
-            termination_counter <= 0;
+            dbg_termination_counter <= 0;
         else if (IF_is_executing && IF_inst != 0) // Count resets for each real inst
-            termination_counter <= 0;
+            dbg_termination_counter <= 0;
 
         else if (IF_is_executing && IF_inst == 0) begin // Count advances for each null inst
-            termination_counter <= termination_counter + 1;
+            dbg_termination_counter <= dbg_termination_counter + 1;
 
-            if (termination_counter == 5) begin
+            if (dbg_termination_counter == 5) begin
                 $display("===== Program terminated =====");
                 $display("    IF_pc = 0x%0x", IF_pc);
                     for(int i = 0; i < 32; i++)
