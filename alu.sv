@@ -1,4 +1,42 @@
 
+module Atomic_alu
+(
+    input [63:0] a,
+    input [63:0] b,
+
+    input width_32,
+    input Alu_Op alu_op,
+    
+    output [63:0] result
+);
+    logic [63:0] temp_result;
+    logic signed [63:0] a_sig;
+    logic signed [63:0] b_sig;
+
+    assign a_sig = a;
+    assign b_sig = b;
+
+    always_comb begin
+        temp_result = 0;
+        case (alu_op) inside
+            ALU_OP_ADD: temp_result = a + b;
+            ALU_OP_AND: temp_result = a & b;
+            ALU_OP_OR:  temp_result = a | b;
+            ALU_OP_XOR: temp_result = a ^ b;
+            ALU_OP_MIN: temp_result = (a_sig < b_sig) ? a_sig : b_sig;
+            ALU_OP_MAX: temp_result = (a_sig > b_sig) ? a_sig : b_sig;
+            ALU_OP_MINU: temp_result = (a < b) ? a : b;
+            ALU_OP_MAXU: temp_result = (a > b) ? a : b;
+            default: $display("Invalid alu_op in atomic_alu, alu_op = %x", alu_op);
+        endcase
+
+        if (width_32) 
+            result = { {32{temp_result[31]}}, temp_result[31:0] };
+        else
+            result = temp_result;
+    end
+endmodule
+
 module Alu
 (
     input [63:0] a,             // rs1
@@ -11,6 +49,7 @@ module Alu
 
     input is_load,
     input is_store,
+    input is_atomic,
 
     output [63:0] result
 );
@@ -28,7 +67,8 @@ module Alu
 
     always_comb begin
 
-        if (is_load || is_store) begin
+
+        if (is_load || is_store || is_atomic) begin
             result = a + b;
         end
         else if (!width_32) begin

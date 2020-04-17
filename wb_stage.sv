@@ -32,7 +32,7 @@ module wb_stage
 	assign en_rd = inst.en_rd;
 
 	always_comb begin
-		if (inst.is_load || inst.is_store || inst.is_csr) begin
+		if (inst.is_load || inst.is_store || inst.is_csr || inst.is_atomic) begin
 			result = mem_result;
 		end
 		else if (inst.is_ecall) begin

@@ -135,7 +135,12 @@ module MEM_reg(
     output [63:0] curr_pc,
     output decoded_inst_t curr_deco,
     output [63:0]         curr_data,
-    output [63:0]         curr_data2
+    output [63:0]         curr_data2,
+
+    input next_do_jump,
+    input [63:0] next_jump_target,
+    output curr_do_jump,
+    output [63:0] curr_jump_target
 );
     always_ff @(posedge clk) begin
         if (reset == 1) begin
@@ -144,6 +149,9 @@ module MEM_reg(
             curr_deco    <= 0;
             curr_data    <= 0;
             curr_data2   <= 0;
+
+            curr_do_jump <= 0;
+            curr_jump_target <= 0;
         end
         else if (wr_en == 1) begin
             if (gen_bubble) begin
@@ -152,6 +160,9 @@ module MEM_reg(
                 curr_deco <= 0;
                 curr_data <= 0;
                 curr_data2 <= 0;
+            
+                curr_do_jump <= 0;
+                curr_jump_target <= 0;
             end
             else begin
                 valid <= 1;
@@ -159,6 +170,9 @@ module MEM_reg(
                 curr_deco    <= next_deco;
                 curr_data    <= next_data;
                 curr_data2   <= next_data2;
+
+                curr_do_jump <= next_do_jump;
+                curr_jump_target <= next_jump_target;
             end
         end
     end
@@ -186,7 +200,12 @@ module WB_reg(
     output [63:0] curr_pc,
     output decoded_inst_t curr_deco, // includes pc & immed
     output [63:0]         curr_alu_result,
-    output [63:0]         curr_mem_result
+    output [63:0]         curr_mem_result,
+
+    input next_do_jump,
+    input [63:0] next_jump_target,
+    output curr_do_jump,
+    output [63:0] curr_jump_target
 );
     always_ff @(posedge clk) begin
         if (reset == 1) begin
@@ -195,6 +214,9 @@ module WB_reg(
             curr_deco       <= 0;
             curr_alu_result <= 0;
             curr_mem_result <= 0;
+            
+            curr_do_jump <= 0;
+            curr_jump_target <= 0;
         end
         else if (wr_en == 1) begin
             if (gen_bubble) begin
@@ -203,6 +225,9 @@ module WB_reg(
                 curr_deco <= 0;
                 curr_alu_result <= 0;
                 curr_mem_result <= 0;
+            
+                curr_do_jump <= 0;
+                curr_jump_target <= 0;
             end
             else begin
                 valid           <= 1;
@@ -210,6 +235,9 @@ module WB_reg(
                 curr_deco       <= next_deco;
                 curr_alu_result <= next_alu_result;
                 curr_mem_result <= next_mem_result;
+            
+                curr_do_jump <= next_do_jump;
+                curr_jump_target <= next_jump_target;
             end
         end
     end

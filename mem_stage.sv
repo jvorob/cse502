@@ -14,19 +14,16 @@ module MEM_Stage
     input [63:0] ex_data,
     input [63:0] ex_data2,
     input is_bubble,
-
-    //TODO: all these are for hazard stage, replace them with mem_busy
-    output dcache_valid,
-    output write_done,      
-    output logic dcache_en,
+    input advance,
 
     output [63:0] mem_ex_rdata,
-
+    output atomic_stall,
+    output [63:0] atomic_result,
 
     // == D$ interface ports
     output logic        dc_en,
     output logic [63:0] dc_in_addr,
-
+    
     output logic        dc_write_en, // write=1, read=0
     output logic [63:0] dc_in_wdata,
     output logic [ 1:0] dc_in_wlen,  // wlen is log(#bytes), 3 = 64bit write
@@ -36,17 +33,23 @@ module MEM_Stage
     input  logic        dc_out_write_done
 
 );
-
     logic [63:0] mem_rdata;
-    logic [63:0] mem_wr_data; // Write data
-
-    assign dcache_en = (inst.is_load || inst.is_store) && !is_bubble;
-
-    logic [5:0] shift_amt;
-    assign shift_amt = {ex_data[2:0], 3'b000};
     logic [63:0] mem_rdata_shifted;
+    logic [63:0] mem_wr_data; // Write data
+    logic [5:0] shift_amt;
+    logic [1:0] atomic_state;
+    logic [63:0] alu_result;
+    logic [63:0] load_result;
 
+    assign shift_amt = {ex_data[2:0], 3'b000};
+    assign mem_rdata = dc_out_rdata;
+    assign mem_rdata_shifted = mem_rdata >> shift_amt;
+
+    assign dc_in_addr = ex_data;
+    assign dc_in_wlen = inst.funct3[1:0]; //is log of number of bytes written (3=>8-byte write)
+    
     always_comb begin
+        
         // This case only matters for stores
         case (inst.funct3)
             F3LS_B: mem_wr_data = ex_data2[7:0];
@@ -55,8 +58,6 @@ module MEM_Stage
             F3LS_D: mem_wr_data = ex_data2[63:0];
             default: mem_wr_data = ex_data2[63:0];
         endcase
-
-        mem_rdata_shifted = mem_rdata >> shift_amt;
         
         // This only matters for loads
         case (inst.funct3)
@@ -64,35 +65,86 @@ module MEM_Stage
             F3LS_B: mem_ex_rdata = { {56{mem_rdata_shifted[7]}}, mem_rdata_shifted[7:0] };
             F3LS_H: mem_ex_rdata = { {48{mem_rdata_shifted[15]}}, mem_rdata_shifted[15:0] };
             F3LS_W: mem_ex_rdata = { {32{mem_rdata_shifted[31]}}, mem_rdata_shifted[31:0] };
-            // load unsigned
+            // load unsign
             F3LS_BU: mem_ex_rdata = { 56'd0, mem_rdata_shifted[7:0] };
             F3LS_HU: mem_ex_rdata = { 48'd0, mem_rdata_shifted[15:0] };
             F3LS_WU: mem_ex_rdata = { 32'd0, mem_rdata_shifted[31:0] };
             default: mem_ex_rdata = mem_rdata;
         endcase
+
+        if (inst.is_atomic && !is_bubble) begin
+            if (atomic_state != 2)
+                atomic_stall = 1;
+            else
+                atomic_stall = 0;
+
+            if ((atomic_state == 0 && inst.is_store) || atomic_state == 1)
+                dc_write_en = 1;
+            else
+                dc_write_en = 0;
+            
+            if ((atomic_state == 0 && inst.is_store) || (atomic_state == 1 && inst.is_swap))
+                dc_in_wdata = mem_wr_data;
+            else if (atomic_state == 1)
+                dc_in_wdata = alu_result;
+            else
+                dc_in_wdata = 'bx;
+            
+            if (inst.is_store)
+                atomic_result = 0;  // Assuming success on every store for now.
+            else if (inst.is_load)
+                atomic_result = load_result;
+            else
+                atomic_result = load_result;
+
+            dc_en = !is_bubble;
+        end
+        else begin
+            atomic_stall = 0;
+            dc_write_en = inst.is_store;
+            dc_in_wdata = mem_wr_data;
+            atomic_result = 'bx;
+            dc_en = (inst.is_load || inst.is_store) && !is_bubble;
+        end
+    end
+    
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            atomic_state <= 0;
+        end
+        else if (atomic_state == 0) begin
+            if (!is_bubble && inst.is_atomic) begin
+                if (dc_out_rvalid) begin
+                    // load or binary op
+                    load_result <= mem_ex_rdata;
+                    if (inst.is_load)
+                        atomic_state <= 2;
+                    else
+                        atomic_state <= 1;
+                end
+                else if (dc_out_write_done) begin
+                    // store
+                    atomic_state <= 2;
+                end
+            end
+        end
+        else if (atomic_state == 1)
+            if (dc_out_write_done) begin
+                atomic_state <= 2;
+            end
+        else if (atomic_state == 2)
+            if (advance)
+                atomic_state <= 0;
+        else if (atomic_state == 3)
+            atomic_state <= 0;
     end
 
-
-    // === Wire requests to/from D-Cache
-    assign dc_en      = dcache_en;
-    assign dc_in_addr = ex_data;
-
-    assign dc_write_en = inst.is_store;
-    assign dc_in_wdata = mem_wr_data;
-    assign dc_in_wlen  = inst.funct3[1:0]; //is log of number of bytes written (3=>8-byte write)
-
-    assign mem_rdata    = dc_out_rdata;
-    assign dcache_valid = dc_out_rvalid;
-    assign write_done   = dc_out_write_done;
-
-
-
-    // Dummy signals for waveform viewer
-    logic is_load;
-    logic is_store;
-    assign is_load = inst.is_load;
-    assign is_store = inst.is_store;
-
-
+    Atomic_alu atomic_alu(
+        .a(ex_data2),
+        .b(load_result),
+        .width_32(inst.alu_width_32),
+        .alu_op(inst.alu_op),
+        .result(alu_result)
+    );
 endmodule
 

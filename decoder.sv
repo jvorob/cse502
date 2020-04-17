@@ -57,6 +57,10 @@ typedef struct packed {
     //logic is_hfence_bvma;
     //logic is_hfence_gvma;
 
+    // Atomic Instructions
+    logic is_atomic;
+    Alu_Op alu_op;
+    logic is_swap;
 
     logic alu_nop; // Don't do anything in the ALU. Pass rs1 through as the alu result.
 
@@ -117,6 +121,7 @@ module Decoder
 
         out.funct3 = inst[14:12]; //TODO: override these for certain instructions
         out.funct7 = inst[31:25]; // branches, adds, etc
+        out.immed = 0;
 
         // ====== SPECIAL SIGNALS
         
@@ -145,6 +150,10 @@ module Decoder
         out.is_sret = 0;
         out.is_mret = 0;
         out.is_wfi = 0;
+
+        out.is_atomic = 0;
+        out.alu_op = 0;
+        out.is_swap = 0;
 
         // === MAIN DECODER:
         // Determine immediate values, and which of rs1,rs2,and rd we're using
@@ -400,6 +409,54 @@ module Decoder
                     end
                 endcase
             end
+            
+            OP_AMO: begin 
+                if (funct3 == 3'b010) out.alu_width_32 = 1;
+                else if (funct3 == 3'b011) out.alu_width_32 = 0;
+                else $display("Invalid instruction for opcode=OP_AMO, funct3 = %x.", funct3);
+
+                out.alu_use_immed = 1;
+                out.is_atomic = 1;
+                { out.en_rs1, out.en_rs2, out.en_rd } = 3'b111;
+                case (funct7[6:2]) inside
+                    F7AMO_LR: begin
+                        out.en_rs2 = 0;
+                        out.is_load = 1;
+                    end
+                    F7AMO_SC: begin
+                        out.is_store = 1;
+                    end
+                    F7AMO_SWAP: begin
+                        out.is_swap = 1;
+                    end
+                    F7AMO_ADD: begin
+                        out.alu_op = ALU_OP_ADD;
+                    end
+                    F7AMO_XOR: begin 
+                        out.alu_op = ALU_OP_XOR;
+                    end
+                    F7AMO_AND: begin
+                        out.alu_op = ALU_OP_AND;
+                    end
+                    F7AMO_OR: begin
+                        out.alu_op = ALU_OP_OR;
+                    end
+                    F7AMO_MIN: begin
+                        out.alu_op = ALU_OP_MIN;
+                    end
+                    F7AMO_MAX: begin
+                        out.alu_op = ALU_OP_MAX;
+                    end
+                    F7AMO_MINU: begin
+                        out.alu_op = ALU_OP_MINU;
+                    end
+                    F7AMO_MAXU: begin
+                        out.alu_op = ALU_OP_MAXU;
+                    end
+                    default: $display("Invalid funct7 for OP_AMO, funct7[6:2] = %x.", funct7[6:2]);
+                endcase
+            end
+
             0: begin
                 if (valid) $display("opcode = 0");
             end

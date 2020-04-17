@@ -156,6 +156,16 @@ typedef enum bit[4:0] {
     F_T11   = 5'd31
 } fp_registers;
 
+typedef enum bit[3:0] {
+    ALU_OP_ADD      = 0,
+    ALU_OP_AND      = 1,
+    ALU_OP_OR       = 2,
+    ALU_OP_XOR      = 3,
+    ALU_OP_MIN      = 5,
+    ALU_OP_MAX      = 6,
+    ALU_OP_MINU     = 7,
+    ALU_OP_MAXU     = 8
+} Alu_Op;
 
 
 // =============================================
@@ -177,7 +187,7 @@ typedef enum bit[6:0] {
     OP_STORE      = 7'b0100011 ,
     OP_STORE_FP   = 7'b0100111 , // not used
     OP_CUSTOM1    = 7'b0101011 , // not used
-    OP_AMO        = 7'b0101111 , // not used
+    OP_AMO        = 7'b0101111 ,
     OP_OP         = 7'b0110011 ,
     OP_LUI        = 7'b0110111 ,
     OP_OP_32      = 7'b0111011 ,
@@ -268,4 +278,18 @@ typedef enum bit[2:0] {
     F3LS_HU       = 3'b101,
     F3LS_WU       = 3'b110
 } Funct3_LoadStore;
+
+typedef enum bit[4:0] {
+    F7AMO_LR    = 5'b00010,
+    F7AMO_SC    = 5'b00011,
+    F7AMO_SWAP  = 5'b00001,
+    F7AMO_ADD   = 5'b00000,
+    F7AMO_XOR   = 5'b00100,
+    F7AMO_AND   = 5'b01100,
+    F7AMO_OR    = 5'b01000,
+    F7AMO_MIN   = 5'b10000,
+    F7AMO_MAX   = 5'b10100,
+    F7AMO_MINU  = 5'b11000,
+    F7AMO_MAXU  = 5'b11100
+} Funct7_Amo;
 

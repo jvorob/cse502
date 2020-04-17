@@ -275,6 +275,7 @@ module top
         .width_32(EX_deco.alu_width_32),
         .is_load(EX_deco.is_load),
         .is_store(EX_deco.is_store),
+        .is_atomic(EX_deco.is_atomic),
 
         .result(alu_out)
     );
@@ -361,24 +362,26 @@ module top
         .curr_pc(),
         .curr_deco(),
         .curr_data(),
-        .curr_data2()        
-    );
+        .curr_data2(),
 
+        .next_do_jump(do_jump),
+        .next_jump_target(jump_target_address),
+        .curr_do_jump(),
+        .curr_jump_target()
+    );
 
     // ------------------------BEGIN MEM STAGE--------------------------
 
-
     logic [63:0] mem_ex_rdata;   // Properly extended rdata
-    logic dcache_en;
-    logic dcache_valid;
-    logic write_done;
+    logic [63:0] atomic_result;
 
     logic [63:0] csr_rs1_val;
     logic [63:0] csr_result;
     logic [63:0] mem_stage_result;
 
     assign csr_rs1_val = (MEM_reg.curr_deco.csr_immed) ? MEM_reg.curr_deco.rs1 : MEM_reg.curr_data;
-    assign mem_stage_result = (MEM_reg.curr_deco.is_csr) ? csr_result : mem_ex_rdata;
+    assign mem_stage_result = (MEM_reg.curr_deco.is_csr) ? csr_result :
+                              (MEM_reg.curr_deco.is_atomic) ? atomic_result : mem_ex_rdata;
 
     Control_Status_Reg CSRs(
         .clk,
@@ -407,10 +410,11 @@ module top
         .ex_data(MEM_reg.curr_data),
         .ex_data2(MEM_reg.curr_data2),
         .is_bubble(!MEM_reg.valid),
-        .dcache_valid(dcache_valid),
-        .write_done(write_done),
-        .dcache_en(dcache_en),
+        .advance(mem_wr_en),
+        
         .mem_ex_rdata(mem_ex_rdata),
+        .atomic_stall(),
+        .atomic_result,
 
         // === D$ interface (passed to MemorySystem)
         .dc_en            (),  // input ports get read in at MemorySystem instantiation
@@ -444,7 +448,12 @@ module top
         .curr_pc(),
         .curr_deco(),
         .curr_alu_result(),
-        .curr_mem_result()
+        .curr_mem_result(),
+
+        .next_do_jump(MEM_reg.curr_do_jump),
+        .next_jump_target(MEM_reg.curr_jump_target),
+        .curr_do_jump(),
+        .curr_jump_target()
     );
 
     // ------------------------BEGIN WB STAGE---------------------------
@@ -476,13 +485,13 @@ module top
 
 		.ecall_stall(ecall_stall)
 	);
-/*
+
     always_comb begin
-        if (WB_reg.valid) begin
-            $display("pc: %x", WB_reg.curr_pc);
+        if (WB_reg.valid && !ecall_stall && WB_reg.curr_do_jump) begin
+            $display("jump to %x, from %x", WB_reg.curr_jump_target, WB_reg.curr_pc);
         end
     end
-*/
+
     // ------------------------END WB STAGE-----------------------------
     
     // -------Modules outside of pipeline (e.g. hazard detection)-------
@@ -504,9 +513,9 @@ module top
         .wb_valid (WB_reg.valid),
 
         //Mem signals (TODO: refactor these away)
-		.dcache_valid(dcache_valid),
-		.write_done(write_done),
-		.dcache_enable(dcache_en),
+		.dcache_valid(mem_sys.dc_out_rvalid),
+		.write_done(mem_sys.dc_out_write_done),
+		.dcache_enable(mem_stage.dc_en),
 
         // WB signals (TODO refactor these away)
 		.ecall_stall(ecall_stall),
@@ -525,7 +534,7 @@ module top
         .if_stall(!IF_inst_valid), //IF doesn't get data dependencies, stalls on Icache
         .id_stall(haz_id_stall),
         .ex_stall(haz_ex_stall),
-        .mem_stall(haz_mem_stall),
+        .mem_stall(haz_mem_stall || mem_stage.atomic_stall),
         .wb_stall(haz_wb_stall),
 
         // Whether that reg is actuall holding anything at the moment
@@ -555,8 +564,10 @@ module top
 
     logic vm_en;
     always_comb begin
-        if (CSRs.mepc_csr[63:60] == 9)
+        if (CSRs.satp_csr[63:60] == 9) begin
+            $display("Turning on VM");
             vm_en = 1;
+        end
         else
             vm_en = 0;
     end
@@ -587,12 +598,10 @@ module top
 
 
 
-
     always_ff @ (posedge clk) begin //Assert intructions aligned
         if (IF_pc[1:0] != 2'b00) 
             $error("ERROR: executing unaligned instruction at IF_pc=%x", IF_pc);
     end
-
 
     // ==== Termination counter logic:
     always_ff @ (posedge clk) begin
@@ -615,9 +624,7 @@ module top
         end
     end
 
-
     initial begin
             $display("Initializing top, entry point = 0x%x", entry);
     end
-    
 endmodule
