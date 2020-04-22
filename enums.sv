@@ -28,8 +28,27 @@ typedef enum bit[1:0] {
     JUMP_ALU_NEZ = 2'b11
 } Jump_Code;
 
+typedef enum bit[1:0] {
+    PRIV_U = 0,
+    PRIV_S = 1,
+    PRIV_M = 3,
 
+    PRIV_RESERVED = 2
+} Privilege_Mode;
+
+// CSRs come in this order: User, Supervisor, Machine
 typedef enum bit[11:0] {
+    // User Trap Setup
+    CSR_USTATUS     = 12'h000,
+    CSR_UIE         = 12'h004,
+    CSR_UTVEC       = 12'h005,
+
+    // User Trap Handling
+    CSR_UEPC        = 12'h041,
+    CSR_UCAUSE      = 12'h042,
+    CSR_UTVAL       = 12'h043,
+    CSR_UIP         = 12'h044,
+    
     // Supervisor Trap Setup
     CSR_SSTATUS     = 12'h100,
     CSR_SEDELEG     = 12'h102,
