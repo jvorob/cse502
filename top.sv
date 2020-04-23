@@ -101,6 +101,7 @@ module top
     // csr register values
     logic [63:0] mepc_csr;
     logic [63:0] sepc_csr;
+    logic [63:0] uepc_csr;
     logic [1:0] curr_priv_mode;
 
     // ------------------------BEGIN IF STAGE--------------------------
@@ -296,6 +297,9 @@ module top
             // mepc
             jump_target_address = mepc_csr & ~64'b011;
         end
+        else if (EX_deco.is_sret) begin
+            jump_target_address = sepc_csr & ~64'b011;
+        end
         else begin
             // mask off bottommost bit of jump target: (according to RISCV spec)
             jump_target_address = (EX_deco.jump_absolute ? alu_out : (EX_reg.curr_pc + EX_deco.immed)) & ~64'b1;
@@ -377,6 +381,11 @@ module top
 
     // ------------------------BEGIN MEM STAGE--------------------------
 
+    logic trap_en;
+    logic [63:0] trap_cause;
+    logic [63:0] trap_pc;
+    logic [63:0] trap_mtval;
+
     logic [63:0] mem_ex_rdata;   // Properly extended rdata
     logic [63:0] atomic_result;
 
@@ -401,20 +410,24 @@ module top
         .csr_rs(MEM_reg.curr_deco.csr_rs),
         .csr_rc(MEM_reg.curr_deco.csr_rc),
         
-        .handle_interrupt(),
-        .handle_exception(),
-        .save_pc(WB_reg.curr_pc),
-        .save_priv(curr_priv_mode),
-        .exception_code(),
+        .trap_en,
+        .trap_cause,
+        .trap_pc,
+        .trap_mtval,
 
-        .handle_mret(),
-        .handle_sret(),
+        .handle_mret(WB_reg.curr_deco.is_mret),
+        .handle_sret(WB_reg.curr_deco.is_sret),
         .handle_uret(0), // We don't support user mode
+
+        .handler_addr(),
 
         .csr_result(csr_result),
         .mepc_csr,
-        
-        .modifying_satp(flush_before_mem)
+        .sepc_csr,
+        .uepc_csr,
+
+        .modifying_satp(flush_before_mem),
+        .curr_priv_mode
     );
 
     MEM_Stage mem_stage(
@@ -460,7 +473,7 @@ module top
         .next_mem_result(mem_stage_result),
 
         // Data signals for current WB step
-        .curr_pc(),
+        .curr_pc(trap_pc),
         .curr_deco(),
         .curr_alu_result(),
         .curr_mem_result(),
@@ -469,6 +482,10 @@ module top
         .next_jump_target(MEM_reg.curr_jump_target),
         .curr_do_jump(),
         .curr_jump_target()
+
+        .curr_trap_en(trap_en),
+        .curr_trap_cause(trap_cause),
+        .curr_trap_mtval(trap_mtval)
     );
 
     // ------------------------BEGIN WB STAGE---------------------------
