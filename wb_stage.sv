@@ -23,7 +23,7 @@ module wb_stage
 	output [4:0] rd,
 	output en_rd,
 
-	output logic ecall_stall
+	output logic stall
 );
 	logic [63:0] ecall_result;
 	logic has_ecall_executed;
@@ -43,12 +43,13 @@ module wb_stage
 		end
 	end
 
+    // ==== Stall while we're busy executing an ECALL hack (TODO TEMP)
 	always_comb begin
 		if (inst.is_ecall && !is_bubble && !has_ecall_executed) begin
-			ecall_stall = 1;
+			stall = 1;
 		end
 		else begin
-			ecall_stall = 0;
+			stall = 0;
 		end
 	end
 

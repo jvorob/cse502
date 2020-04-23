@@ -2,12 +2,14 @@
 //
 // Looks at nonlocal interactions between pipeline stages
 // (i.e. data dependencies spanning several stages)
-// Notifies of data hazard, enables forwarding paths
+// Notifies of data hazards detected
+//
+// TODO: add forwarding signals (i.e. also output which reg vals
+//                               to forward through which stages)
 // 
-// TODO: all of the aforementioned. At the moment, it just outputs
-// stall signals for everything, which could easily be done locally
 
 module hazard_unit(
+    // Inputs
     input decoded_inst_t ID_deco,
     input decoded_inst_t EX_deco,
     input decoded_inst_t MEM_deco,
@@ -18,21 +20,10 @@ module hazard_unit(
     input mem_valid,
     input wb_valid,
 
-	// signals from mem_stage
-	input dcache_valid,
-	input write_done,
-	input dcache_enable,
-
-    // signals from WB stage
-	input ecall_stall,
-    input wb_is_ecall,
-    output flush_before_wb,
-
-    output id_stall,
-    output ex_stall,
-    output mem_stall,
-    output wb_stall
+    // Outputs
+    output data_hazard_ID
 );
+
     // ID signals
     logic [4:0] id_rs1, id_rs2;
     logic id_en_rs1, id_en_rs2;
@@ -67,32 +58,30 @@ module hazard_unit(
     assign wb_rd = WB_deco.rd;
     assign wb_en_rd = WB_deco.en_rd;
 
+
+    // === Detect data hazards in ID stage
     always_comb begin
         if (!id_valid) begin
-            id_stall = 0;
+            data_hazard_ID = 0;
         end
         else begin
             if (ID_deco.is_mret && (ex_valid || mem_valid || wb_valid)) begin
-                id_stall = 1;
+                data_hazard_ID = 1;
             end
             else if ( wb_valid && wb_en_rd && ((wb_rd == id_rs1 && id_en_rs1) || (wb_rd == id_rs2 && id_en_rs2)) ) begin 
-                id_stall = 1;
+                data_hazard_ID = 1;
             end
             else if ( mem_valid && mem_en_rd && ((mem_rd == id_rs1 && id_en_rs1) || (mem_rd == id_rs2 && id_en_rs2)) ) begin
-                id_stall = 1;
+                data_hazard_ID = 1;
             end
             else if ( ex_valid && ex_en_rd && ((ex_rd == id_rs1 && id_en_rs1) || (ex_rd == id_rs2 && id_en_rs2)) ) begin
-                id_stall = 1;
+                data_hazard_ID = 1;
             end
             else begin
-                id_stall = 0;
+                data_hazard_ID = 0;
             end
         end
     end
 
-    assign ex_stall = 0;
-    assign mem_stall = ((mem_is_load) && (!dcache_valid)) || ((mem_is_store) && (!write_done)) && dcache_enable;
-    assign wb_stall = ecall_stall;
-    assign flush_before_wb = wb_is_ecall;
 endmodule
 

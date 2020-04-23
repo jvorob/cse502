@@ -14,23 +14,24 @@ module MEM_Stage
     input [63:0] ex_data,
     input [63:0] ex_data2,
     input is_bubble,
-    input advance,
+    input advance, // if instruction is actually moving onward this cycle
+
+    output stall, // if MEM instruction needs more time
 
     output [63:0] mem_ex_rdata,
-    output atomic_stall,
     output [63:0] atomic_result,
 
     // == D$ interface ports
-    output logic        dc_en,
-    output logic [63:0] dc_in_addr,
-    
-    output logic        dc_write_en, // write=1, read=0
-    output logic [63:0] dc_in_wdata,
-    output logic [ 1:0] dc_in_wlen,  // wlen is log(#bytes), 3 = 64bit write
+        output logic        dc_en,
+        output logic [63:0] dc_in_addr,
+        
+        output logic        dc_write_en, // write=1, read=0
+        output logic [63:0] dc_in_wdata,
+        output logic [ 1:0] dc_in_wlen,  // wlen is log(#bytes), 3 = 64bit write
 
-    input  logic [63:0] dc_out_rdata,
-    input  logic        dc_out_rvalid,     //TODO: we should maybe merge rvalid and write_done
-    input  logic        dc_out_write_done
+        input  logic [63:0] dc_out_rdata,
+        input  logic        dc_out_rvalid,     //TODO: we should maybe merge rvalid and write_done
+        input  logic        dc_out_write_done
 
 );
     logic [63:0] mem_rdata;
@@ -47,7 +48,14 @@ module MEM_Stage
 
     assign dc_in_addr = ex_data;
     assign dc_in_wlen = inst.funct3[1:0]; //is log of number of bytes written (3=>8-byte write)
-    
+
+
+    logic atomic_stall; //this gets set by the atomic state machine, if we're in an atomic op
+    assign stall = !is_bubble &&  (
+                            (inst.is_load   && !dc_out_rvalid) || 
+                            (inst.is_store  && !dc_out_write_done) ||
+                            (inst.is_atomic && atomic_stall)
+                        );
     always_comb begin
         
         // This case only matters for stores
