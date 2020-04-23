@@ -7,7 +7,7 @@
 `include "hazard.sv"
 `include "memory_system.sv"
 `include "mem_stage.sv"
-`include "csr.sv"
+`include "privilege.sv"
 
 module top
 #(
@@ -99,10 +99,12 @@ module top
     logic flush_before_ex;	// Used for jumps/branches
 
     // csr register values
-    logic [63:0] mepc_csr;
-    logic [63:0] sepc_csr;
-    logic [63:0] uepc_csr;
+    logic [63:0] epc_addr;
+    logic is_xret;
+    logic [63:0] handler_addr;
+    logic jump_trap_handler;
     logic [1:0] curr_priv_mode;
+
 
     // ------------------------BEGIN IF STAGE--------------------------
 
@@ -126,8 +128,16 @@ module top
         end 
         
         else if (if_wr_en) begin
+
+            if (is_xret) begin
+                IF_pc <= epc_addr & ~64'b011;
+            end
+            else if (jump_trap_handler) begin
+                IF_pc <= handler_addr;
+            end
+
             // (ECALL: re-execute flushed instructions
-            if (flush_before_wb) begin 
+            else if (flush_before_wb) begin 
                 if(!WB_reg.valid) $error("ERROR: flush_before_wb expects ECALL inst in WB, found bubble");
 
                 // start after ECALL which is in WB (TODO: will be in WB?)
@@ -290,22 +300,8 @@ module top
     logic [63:0] jump_target_address;
     logic do_jump;
 
-    logic debug_is_mret;
-    assign debug_is_mret = EX_deco.is_mret;
-    always_comb begin
-        if (EX_deco.is_mret) begin
-            // mepc
-            jump_target_address = mepc_csr & ~64'b011;
-        end
-        else if (EX_deco.is_sret) begin
-            jump_target_address = sepc_csr & ~64'b011;
-        end
-        else begin
-            // mask off bottommost bit of jump target: (according to RISCV spec)
-            jump_target_address = (EX_deco.jump_absolute ? alu_out : (EX_reg.curr_pc + EX_deco.immed)) & ~64'b1;
-        end
-    end
-
+    // mask off bottommost bit of jump target: (according to RISCV spec)
+    assign jump_target_address = (EX_deco.jump_absolute ? alu_out : (EX_reg.curr_pc + EX_deco.immed)) & ~64'b1;
 
     //Deciding whether to jump
     always_comb begin
@@ -419,12 +415,12 @@ module top
         .handle_sret(WB_reg.curr_deco.is_sret),
         .handle_uret(0), // We don't support user mode
 
-        .handler_addr(),
+        .handler_addr,
 
         .csr_result(csr_result),
-        .mepc_csr,
-        .sepc_csr,
-        .uepc_csr,
+
+        .is_xret,
+        .epc_addr,
 
         .modifying_satp(flush_before_mem),
         .curr_priv_mode
@@ -481,7 +477,7 @@ module top
         .next_do_jump(MEM_reg.curr_do_jump),
         .next_jump_target(MEM_reg.curr_jump_target),
         .curr_do_jump(),
-        .curr_jump_target()
+        .curr_jump_target(),
 
         .curr_trap_en(trap_en),
         .curr_trap_cause(trap_cause),

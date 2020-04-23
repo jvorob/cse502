@@ -31,13 +31,13 @@ module Privilege_System
     input handle_sret,
     input handle_uret,
 
+    output jump_trap_handler,
     output [63:0] handler_addr,
 
     output [REG_WIDTH-1:0] csr_result, // The value to be written to rd.
 
-    output [REG_WIDTH-1:0] mepc_csr,
-    output [REG_WIDTH-1:0] sepc_csr,
-    output [REG_WIDTH-1:0] uepc_csr,
+    output is_xret,
+    output [REG_WIDTH-1:0] epc_addr,
     output [REG_WIDTH-1:0] satp_csr,
 
     output modifying_satp,
@@ -53,9 +53,6 @@ module Privilege_System
     assign lowest_priv = addr[CSR-3:CSR-4];
 
     assign csr_result = csrs[addr]; // Combinationally read CSRs
-    assign mepc_csr = csrs[CSR_MEPC];
-    assign sepc_csr = csrs[CSR_SEPC];
-    assign uepc_csr = csrs[CSR_UEPC];
     assign satp_csr = csrs[CSR_SATP];
 
     logic is_interrupt;
@@ -87,18 +84,6 @@ module Privilege_System
             csrs[CSR_MSTATUS][7] <= csrs[CSR_MSTATUS][3]; // set mstatus.(mpie=7) to mstatus.(mie=3)
             csrs[CSR_MSTATUS][3] <= 0; // set mstatus.(mie=3) = 0
             
-            if (csrs[CSR_MTVEC][1:0] == 0) begin        // Direct
-                handler_addr <= { csrs[CSR_MTVEC][63:2], 2'b00 };
-            end
-            else if (csrs[CSR_MTVEC][1:0] == 1) begin   // Vectored
-                if (is_interrupt == 0)
-                    handler_addr <= { csrs[CSR_MTVEC][63:2], 2'b00 };
-                else
-                    handler_addr <= { csrs[CSR_MTVEC][63:2], 2'b00 } + ( { 1'b0, csrs[CSR_MCAUSE][62:0] } << 2);
-            end
-            else begin
-                $display("CSR MTVEC mode is an invalid value: 0x%x", csrs[CSR_MTVEC][1:0]);
-            end
 
             csrs[CSR_MCAUSE] <= trap_cause;
             csrs[CSR_MTVAL] <= trap_mtval;
@@ -130,6 +115,42 @@ module Privilege_System
         end
     end
 
+    always_comb begin
+        if (trap_en)
+            jump_trap_handler = 1;
+        else
+            jump_trap_handler = 0;
+
+
+        if (csrs[CSR_MTVEC][1:0] == 0) begin        // Direct
+            handler_addr = { csrs[CSR_MTVEC][63:2], 2'b00 };
+        end
+        else if (csrs[CSR_MTVEC][1:0] == 1) begin   // Vectored
+            if (is_interrupt == 0)
+                handler_addr = { csrs[CSR_MTVEC][63:2], 2'b00 };
+            else
+                handler_addr = { csrs[CSR_MTVEC][63:2], 2'b00 } + ( { 1'b0, csrs[CSR_MCAUSE][62:0] } << 2);
+        end
+        else begin
+            $display("CSR MTVEC mode is an invalid value: 0x%x", csrs[CSR_MTVEC][1:0]);
+        end
+    end
+
+    always_comb begin
+        is_xret = handle_mret || handle_sret || handle_uret;
+        if (handle_mret) begin
+            epc_addr = csrs[CSR_MEPC];
+        end
+        else if (handle_sret) begin
+            epc_addr = csrs[CSR_SEPC];
+        end
+        else if (handle_uret) begin
+            epc_addr = csrs[CSR_UEPC];
+        end
+        else begin
+            epc_addr = 0;
+        end
+    end
 
 endmodule
 
