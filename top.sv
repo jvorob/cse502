@@ -177,48 +177,48 @@ module top
         
         else if (if_wr_en) begin
             //TODO: IF_PC logic: (in order of priority)
-            // disabled (don't care what happens, we're waiting for the pipeline to drain)
-            // trap (actually jumping for the trap)
-            // flush before_mem (reexecute)
-            // do_jump
-            // flush_before_ex (reexecute)
-            // flush_before_id (reexecute)
-            //
+            // if IF_disabled, we don't care what happens, we're waiting for the pipeline to drain)
 
-            if (is_xret) begin
+            // - These are the conditions, in order
+            // - Conditions closer to the end of the pipeline take priority,
+            //   since they typically flush out any preceding them
+            // - Jumps and traps are special-cased, but still happen in
+            //   priority order
+            // - Can handle re-executing on a flush to any stage, even though
+            //   we don't use most of them (just for completeness)
+
+            if (is_xret) begin                  // ===== Handle trap-related jumps
                 IF_pc <= epc_addr & ~64'b011;
             end
             else if (jump_trap_handler) begin
                 IF_pc <= handler_addr;
             end
 
-            // (ECALL: re-execute flushed instructions
-            else if (flush_before_wb) begin 
-                if(!WB_reg.valid) $error("ERROR: flush_before_wb expects ECALL inst in WB, found bubble");
-
-                // start after ECALL which is in WB (TODO: will be in WB?)
-                IF_pc <= WB_reg.curr_pc + 4;
+            else if (flush_before_wb) begin     // === (this should never happen)
+                $error("ERROR: FLUSH_BEFORE_WB should only happen if we're jumping for a trap");
             end
 
-            else if (flush_before_mem) begin
+            else if (flush_before_mem) begin    // === Reexecute on a flush in mem
                 if (!MEM_reg.valid) $error ("ERROR: flush_before_mem expects inst in MEM, found bubble");
-
-                // start after instruction in MEM
-                IF_pc <= MEM_reg.curr_pc + 4;
+                IF_pc <= MEM_reg.curr_pc + 4; // start after instruction in MEM
             end
 
-            // (JUMP: change pc to jump_target)
-            else if (flush_before_ex) begin 
-                if(!EX_reg.valid) $error("ERROR: flush_before_ex expects inst in EX, found bubble");
-
-                if (EX_do_jump) 
+            else if (EX_do_jump) begin          // === Do a jump
                     IF_pc <= jump_target_address;
-                else 
-                    $error("ERROR: We should only flush_before_ex if EX_do_jump is high"); 
             end
 
-            // Default PC logic: advance:  
-            else begin
+
+            else if (flush_before_ex) begin     // === Re-execute on a non-jump flush to EX (not typical)
+                if(!EX_reg.valid) $error("ERROR: flush_before_ex expects inst in EX, found bubble");
+                IF_pc <= EX_reg.curr_pc + 4;
+            end
+            else if (flush_before_id) begin     // === Re-execute on a non-jump flush to ID  (not typical)
+                if(!ID_reg.valid) $error("ERROR: flush_before_id expects inst in ID, found bubble");
+                IF_pc <= ID_reg.curr_pc + 4;
+            end
+
+            
+            else begin                          // === Default PC logic: advance:  
                 IF_pc <= IF_pc+4;
             end
         end
@@ -428,21 +428,14 @@ module top
 
     // ------------------------BEGIN MEM STAGE--------------------------
 
-    logic trap_en;
-    logic [63:0] trap_cause;
-    logic [63:0] trap_pc;
-    logic [63:0] trap_mtval;
-    logic trap_is_ret;
-    logic [1:0] trap_ret_from_priv;
-
     logic [63:0] mem_ex_rdata;   // Properly extended rdata
     logic [63:0] atomic_result;
 
     logic [63:0] csr_rs1_val;
     logic [63:0] csr_result;
-    logic [63:0] mem_stage_result;
-
     assign csr_rs1_val = (MEM_reg.curr_deco.csr_immed) ? MEM_reg.curr_deco.rs1 : MEM_reg.curr_data;
+
+    logic [63:0] mem_stage_result;
     assign mem_stage_result = (MEM_reg.curr_deco.is_csr) ? csr_result :
                               (MEM_reg.curr_deco.is_atomic) ? atomic_result : mem_ex_rdata;
 
@@ -450,30 +443,33 @@ module top
         .clk,
         .reset,
 
+        // ==== MEM CSR op inputs (TODO: move these into mem_stage and rename)
+        .valid(MEM_reg.valid),
         .addr(MEM_reg.curr_deco.immed),
         .val(csr_rs1_val),
-
-        .valid(MEM_reg.valid),
         .is_csr(MEM_reg.curr_deco.is_csr),
         .csr_rw(MEM_reg.curr_deco.csr_rw),
         .csr_rs(MEM_reg.curr_deco.csr_rs),
         .csr_rc(MEM_reg.curr_deco.csr_rc),
-        
-        .trap_en,
-        .trap_cause,
-        .trap_pc,
-        .trap_mtval,
 
-        .trap_is_ret,
-        .trap_ret_from_priv,
-
-        .handler_addr,
-
+        // output
         .csr_result(csr_result),
+        
+        // === TRAP inputs
+        .trap_en           (WB_reg.valid && WB_reg.curr_trapped),
+        .trap_cause        (WB_reg.curr_trap_cause),
+        .trap_pc           (WB_reg.curr_pc),
+        .trap_mtval        (WB_reg.curr_trap_val),
+        .trap_is_ret       (WB_reg.curr_deco.is_trap_ret),
+        .trap_ret_from_priv(WB_reg.curr_deco.trap_ret_priv),
 
-        .is_xret,
-        .epc_addr,
+        // outputs
+        .handler_addr(),
 
+        .is_xret(),
+        .epc_addr(),
+
+        // === Misc
         .modifying_satp(),
         .curr_priv_mode
     );
@@ -534,11 +530,9 @@ module top
         .curr_do_jump(),
         .curr_jump_target(),
 
-        .curr_trapped(trap_en),
-        .curr_trap_cause(trap_cause),
-        .curr_trap_val(trap_mtval),
-        .curr_trap_is_ret(trap_is_ret),
-        .curr_trap_ret_from_priv(trap_ret_from_priv)
+        .curr_trapped(),
+        .curr_trap_cause(),
+        .curr_trap_val()
     );
 
     // ------------------------BEGIN WB STAGE---------------------------

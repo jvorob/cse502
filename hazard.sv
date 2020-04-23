@@ -65,10 +65,7 @@ module hazard_unit(
             data_hazard_ID = 0;
         end
         else begin
-            if (ID_deco.is_mret && (ex_valid || mem_valid || wb_valid)) begin
-                data_hazard_ID = 1;
-            end
-            else if ( wb_valid && wb_en_rd && ((wb_rd == id_rs1 && id_en_rs1) || (wb_rd == id_rs2 && id_en_rs2)) ) begin 
+            if ( wb_valid && wb_en_rd && ((wb_rd == id_rs1 && id_en_rs1) || (wb_rd == id_rs2 && id_en_rs2)) ) begin 
                 data_hazard_ID = 1;
             end
             else if ( mem_valid && mem_en_rd && ((mem_rd == id_rs1 && id_en_rs1) || (mem_rd == id_rs2 && id_en_rs2)) ) begin

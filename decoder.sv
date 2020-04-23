@@ -49,13 +49,11 @@ typedef struct packed {
     logic is_break;     // Not currently used, remove this comment if this is eventually used
 
     // Privileged Instructions
-    logic is_uret;
-    logic is_sret;
-    logic is_mret;
+    logic is_trap_ret; //is it one of mret sret uret
+    Privilege_Mode trap_ret_priv; // which of mret sret uret is it
+
     logic is_wfi;
-    //logic is_sfence_vma;
-    //logic is_hfence_bvma;
-    //logic is_hfence_gvma;
+    //logic is_sfence_vma; //TODO
 
     // Atomic Instructions
     logic is_atomic;
@@ -146,9 +144,8 @@ module Decoder
 
         out.alu_nop = 0;
 
-        out.is_uret = 0;
-        out.is_sret = 0;
-        out.is_mret = 0;
+        out.is_trap_ret = 0;
+        out.trap_ret_priv = 0;
         out.is_wfi = 0;
 
         out.is_atomic = 0;
@@ -325,22 +322,17 @@ module Decoder
                             // $display("ebreak, inst=%x, pc=%x", inst, pc);
                             // $finish;
 						end
-                        else if (immed_I == 12'b010) begin
-                            // URET
-                            out.is_uret = 1;
-                            $error("NOT IMPLEMENTED: uret, inst=%x, pc=%x", inst, pc); //TODO
+
+                        else if (immed_I == 12'b010) begin // URET
+                            $error("Illegal instruction URET, inst=%x, pc=%x", inst, pc);
                         end
-                        else if (immed_I == 12'b0001_0000_0010) begin
-                            // SRET
-                            out.is_sret = 1;
-                            $error("NOT IMPLEMENTED: sret, inst=%x, pc=%x", inst, pc); //TODO
+                        else if (immed_I == 12'b0001_0000_0010) begin // SRET
+                            out.is_trap_ret = 1;
+                            out.trap_ret_priv = PRIV_S;
                         end
-                        else if (immed_I == 12'b0011_0000_0010) begin
-                            // MRET
-                            out.is_mret = 1;
-                            out.jump_if = JUMP_YES;
-                            //TODO: do this properly
-                            $display("mret, inst=%x, pc=%x", inst, pc);
+                        else if (immed_I == 12'b0011_0000_0010) begin // MRET
+                            out.is_trap_ret = 1;
+                            out.trap_ret_priv = PRIV_M;
                         end
                         else if (immed_I == 12'b0001_0000_0101) begin
                             // WFI
