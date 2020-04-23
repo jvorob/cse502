@@ -35,29 +35,44 @@ module ID_reg(
     // Data signals coming in from IF
     input [63:0] next_pc,
     input [63:0] next_inst,
-    input next_is_trapped,
+
+    input                next_trapped,
+    input [63:0]         next_trap_cause,
+    input [63:0]         next_trap_val,
 
     // Data signals for current ID step
     output [63:0] curr_pc, //instruction not yet decoded, so pass this in separately
     output [63:0] curr_inst,
-    output curr_is_trapped
+
+    output                curr_trapped,
+    output [63:0]         curr_trap_cause,
+    output [63:0]         curr_trap_val
 );
     always_ff @(posedge clk) begin
         if (reset == 1) begin
             valid <= 0;
             curr_pc    <= 0;
             curr_inst  <= 0;
+            curr_trapped    <= 0;
+            curr_trap_cause <= 0;
+            curr_trap_val   <= 0;
         end
         else if (wr_en == 1) begin
             if (gen_bubble) begin
                 valid <= 0;
                 curr_pc <= 0;
                 curr_inst <= 0;
+                curr_trapped    <= 0;
+                curr_trap_cause <= 0;
+                curr_trap_val   <= 0;
             end
             else begin
                 valid <= 1;
                 curr_pc <= next_pc;
                 curr_inst <= next_inst;
+                curr_trapped    <= next_trapped;
+                curr_trap_cause <= next_trap_cause;
+                curr_trap_val   <= next_trap_val;
             end
         end
     end
@@ -80,13 +95,20 @@ module EX_reg(
     input decoded_inst_t next_deco, // includes pc & immed
     input [63:0]         next_val_rs1,
     input [63:0]         next_val_rs2,
-    input next_is_trapped,
+
+    input                next_trapped,
+    input [63:0]         next_trap_cause,
+    input [63:0]         next_trap_val,
 
     // Data signals for current EX step
     output [63:0]         curr_pc,
     output decoded_inst_t curr_deco,
     output [63:0]         curr_val_rs1,
-    output [63:0]         curr_val_rs2
+    output [63:0]         curr_val_rs2,
+
+    output                curr_trapped,
+    output [63:0]         curr_trap_cause,
+    output [63:0]         curr_trap_val
 );
     always_ff @(posedge clk) begin
         if (reset) begin
@@ -95,6 +117,9 @@ module EX_reg(
             curr_deco    <= 0;
             curr_val_rs1 <= 0;
             curr_val_rs2 <= 0;
+            curr_trapped    <= 0;
+            curr_trap_cause <= 0;
+            curr_trap_val   <= 0;
         end
         else if (wr_en == 1) begin
             if (gen_bubble) begin
@@ -103,6 +128,9 @@ module EX_reg(
                 curr_deco <= 0;
                 curr_val_rs1 <= 0;
                 curr_val_rs2 <= 0;
+                curr_trapped    <= 0;
+                curr_trap_cause <= 0;
+                curr_trap_val   <= 0;
             end
             else begin
                 valid <= 1;
@@ -110,6 +138,10 @@ module EX_reg(
                 curr_deco    <= next_deco;
                 curr_val_rs1 <= next_val_rs1;
                 curr_val_rs2 <= next_val_rs2;
+
+                curr_trapped    <= next_trapped;
+                curr_trap_cause <= next_trap_cause;
+                curr_trap_val   <= next_trap_val;
             end
         end
     end
@@ -132,13 +164,20 @@ module MEM_reg(
     input decoded_inst_t next_deco, // includes pc & immed
     input [63:0]         next_data,  // result from ALU or other primary value
     input [63:0]         next_data2, // extra value if needed (e.g. for stores, etc)
-    input next_is_trapped,
+
+    input                next_trapped,
+    input [63:0]         next_trap_cause,
+    input [63:0]         next_trap_val,
 
     // Data signals for current MEM step
     output [63:0] curr_pc,
     output decoded_inst_t curr_deco,
     output [63:0]         curr_data,
     output [63:0]         curr_data2,
+
+    output                curr_trapped,
+    output [63:0]         curr_trap_cause,
+    output [63:0]         curr_trap_val,
 
     input next_do_jump,
     input [63:0] next_jump_target,
@@ -155,6 +194,10 @@ module MEM_reg(
 
             curr_do_jump <= 0;
             curr_jump_target <= 0;
+
+            curr_trapped    <= 0;
+            curr_trap_cause <= 0;
+            curr_trap_val   <= 0;
         end
         else if (wr_en == 1) begin
             if (gen_bubble) begin
@@ -166,6 +209,10 @@ module MEM_reg(
             
                 curr_do_jump <= 0;
                 curr_jump_target <= 0;
+
+                curr_trapped    <= 0;
+                curr_trap_cause <= 0;
+                curr_trap_val   <= 0;
             end
             else begin
                 valid <= 1;
@@ -176,6 +223,10 @@ module MEM_reg(
 
                 curr_do_jump <= next_do_jump;
                 curr_jump_target <= next_jump_target;
+
+                curr_trapped    <= next_trapped;
+                curr_trap_cause <= next_trap_cause;
+                curr_trap_val   <= next_trap_val;
             end
         end
     end
@@ -199,11 +250,19 @@ module WB_reg(
     input [63:0]         next_alu_result,
     input [63:0]         next_mem_result,
 
+    input                next_trapped,
+    input [63:0]         next_trap_cause,
+    input [63:0]         next_trap_val,
+
     // Data signals for current WB step
     output [63:0] curr_pc,
     output decoded_inst_t curr_deco, // includes pc & immed
     output [63:0]         curr_alu_result,
     output [63:0]         curr_mem_result,
+
+    output                curr_trapped,
+    output [63:0]         curr_trap_cause,
+    output [63:0]         curr_trap_val,
 
     input next_do_jump,
     input [63:0] next_jump_target,
@@ -220,6 +279,10 @@ module WB_reg(
             
             curr_do_jump <= 0;
             curr_jump_target <= 0;
+
+            curr_trapped    <= 0;
+            curr_trap_cause <= 0;
+            curr_trap_val   <= 0;
         end
         else if (wr_en == 1) begin
             if (gen_bubble) begin
@@ -231,6 +294,10 @@ module WB_reg(
             
                 curr_do_jump <= 0;
                 curr_jump_target <= 0;
+
+                curr_trapped    <= 0;
+                curr_trap_cause <= 0;
+                curr_trap_val   <= 0;
             end
             else begin
                 valid           <= 1;
@@ -241,6 +308,10 @@ module WB_reg(
             
                 curr_do_jump <= next_do_jump;
                 curr_jump_target <= next_jump_target;
+
+                curr_trapped    <= next_trapped;
+                curr_trap_cause <= next_trap_cause;
+                curr_trap_val   <= next_trap_val;
             end
         end
     end

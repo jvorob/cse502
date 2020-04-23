@@ -210,7 +210,7 @@ module top
     logic [63:0] ID_out1;
     logic [63:0] ID_out2;
 
-    // Ecall values
+    // Ecall values (FOR TEMP ECALL HACK)
     logic [63:0] a0, a1, a2, a3, a4, a5, a6, a7;
 
     // === Enable RegFile writeback USING SIGNALS FROM WB STAGE
@@ -218,9 +218,10 @@ module top
 	logic [63:0] WB_result;
 	logic [4:0] WB_rd;
 	logic WB_en_rd;
-    assign writeback_en = WB_reg.valid && !haz_wb_stall && WB_en_rd; 
+    assign writeback_en = WB_reg.valid && !wb_stage.stall && WB_en_rd; 
     // only wb on a valid instruction, not stalled (i.e. completed)
     // and which actually has something to writeback (en_rd)
+    //TODO: change this to be WB_complete
 
     RegFile rf(
         .clk(clk),
@@ -435,9 +436,10 @@ module top
         .ex_data2(MEM_reg.curr_data2),
         .is_bubble(!MEM_reg.valid),
         .advance(mem_wr_en),
+
+        .stall(),
         
         .mem_ex_rdata(mem_ex_rdata),
-        .atomic_stall(),
         .atomic_result,
 
         // === D$ interface (passed to MemorySystem)
@@ -479,19 +481,20 @@ module top
         .curr_do_jump(),
         .curr_jump_target(),
 
-        .curr_trap_en(trap_en),
+        .curr_trapped(trap_en),
         .curr_trap_cause(trap_cause),
-        .curr_trap_mtval(trap_mtval)
+        .curr_trap_val(trap_mtval)
     );
 
     // ------------------------BEGIN WB STAGE---------------------------
 
 	logic ecall_stall;
 
-	wb_stage wb(
+	wb_stage wb_stage(
 		.clk(clk),
 		.reset(reset),
 		
+        //TODO: TEMP: for ECALL hack
 		.a0(a0),
 		.a1(a1),
 		.a2(a2),
@@ -511,8 +514,11 @@ module top
 		.rd(WB_rd),
 		.en_rd(WB_en_rd),
 
-		.ecall_stall(ecall_stall)
+		.stall()
 	);
+
+    assign flush_before_wb = WB_reg.curr_deco.is_ecall; //TODO: ONLY FOR THE ECALL HACK
+    //TODO: figure out a better place to put this signal
 
     always_comb begin
         if (WB_reg.valid && !ecall_stall && WB_reg.curr_do_jump) begin
@@ -524,10 +530,10 @@ module top
     
     // -------Modules outside of pipeline (e.g. hazard detection)-------
     
-    logic haz_id_stall;
-    logic haz_ex_stall;
-    logic haz_mem_stall;
-    logic haz_wb_stall;
+    logic IF_stall;
+    assign IF_stall = !IF_inst_valid;
+    logic ID_stall;
+    assign ID_stall = haz.data_hazard_ID;
     
     hazard_unit haz(
         .ID_deco(ID_deco),
@@ -540,32 +546,20 @@ module top
         .mem_valid(MEM_reg.valid),
         .wb_valid (WB_reg.valid),
 
-        //Mem signals (TODO: refactor these away)
-		.dcache_valid(mem_sys.dc_out_rvalid),
-		.write_done(mem_sys.dc_out_write_done),
-		.dcache_enable(mem_stage.dc_en),
+        // Outputs data hazards detected
+        .data_hazard_ID()
 
-        // WB signals (TODO refactor these away)
-		.ecall_stall(ecall_stall),
-        .wb_is_ecall(WB_reg.curr_deco.is_ecall),
-        .flush_before_wb(flush_before_wb),
-
-        // Outputs stalls at corresponding locations
-        .id_stall(haz_id_stall),
-        .ex_stall(haz_ex_stall),
-        .mem_stall(haz_mem_stall),
-        .wb_stall(haz_wb_stall)
     );
 
     traffic_control traffic(
         // Inputs (stalls from hazard unit)
-        .if_stall(!IF_inst_valid), //IF doesn't get data dependencies, stalls on Icache
-        .id_stall(haz_id_stall),
-        .ex_stall(haz_ex_stall),
-        .mem_stall(haz_mem_stall || mem_stage.atomic_stall),
-        .wb_stall(haz_wb_stall),
+        .if_stall(IF_stall), //IF doesn't get data dependencies, stalls on Icache
+        .id_stall(ID_stall),
+        .ex_stall(0),
+        .mem_stall(mem_stage.stall),
+        .wb_stall(wb_stage.stall),
 
-        // Whether that reg is actuall holding anything at the moment
+        // Whether that reg is actually holding anything at the moment
         .id_valid (ID_reg.valid),
         .ex_valid (EX_reg.valid),
         .mem_valid(MEM_reg.valid),
