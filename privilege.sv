@@ -1,7 +1,7 @@
 
 // Currently, traps and exceptions aren't supported in our processor,
 // so we won't do anything when CSRs are accessed inappropriately.
-module Control_Status_Reg
+module Privilege_System
 #(
     REG_WIDTH = 64,
     CSR_COUNT = 4096,
@@ -27,6 +27,7 @@ module Control_Status_Reg
     input handle_exception,
     input [63:0] save_pc,        // Write this to the correct xEPC 
     input [1:0] save_priv,
+    input [62:0] exception_code, // Write the exception code to mcause. Only 63 bits. Add 1 more for interrupt
 
     input handle_mret,
     input handle_sret,
@@ -39,6 +40,7 @@ module Control_Status_Reg
     output [REG_WIDTH-1:0] csr_result, // The value to be written to rd.
 
     output [REG_WIDTH-1:0] mepc_csr,
+    output [REG_WIDTH-1:0] sepc_csr,
     output [REG_WIDTH-1:0] satp_csr,
 
     output modifying_satp
@@ -53,6 +55,7 @@ module Control_Status_Reg
 
     assign csr_result = csrs[addr]; // Combinationally read CSRs
     assign mepc_csr = csrs[CSR_MEPC];
+    assign sepc_csr = csrs[CSR_SEPC];
     assign satp_csr = csrs[CSR_SATP];
 
     assign modifying_satp = valid && is_csr && (addr == CSR_SATP);
@@ -84,11 +87,13 @@ module Control_Status_Reg
             csrs[CSR_MSTATUS][3] <= 0; // set mstatus.(mie=3) = 0
             
             // handler_addr <= ; // output interrupt handler address based on mode of operation
+            csrs[CSR_MCAUSE] <= { 1'b1, exception_code };
         end
 
         if (handle_exception) begin
             // Not quite sure the exact steps to be taken in the event of an exception yet.
             // Probably not exactly the same as an interrupt.
+            csrs[CSR_MCAUSE] <= { 1'b0, exception_code };
         end
 
         if (handle_mret) begin

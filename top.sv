@@ -79,11 +79,6 @@ module top
         dbg_tick_counter <= dbg_tick_counter + 1;
     end
 
-
-
-
-
-
     // Traffic controller signals:
     // gen_bubble
     logic if_gen_bubble;
@@ -105,10 +100,10 @@ module top
 
     // csr register values
     logic [63:0] mepc_csr;
+    logic [63:0] sepc_csr;
+    logic [1:0] curr_priv_mode;
 
     // ------------------------BEGIN IF STAGE--------------------------
-    
-
 
     logic [63:0] IF_pc;
     logic [31:0] IF_inst;
@@ -393,7 +388,7 @@ module top
     assign mem_stage_result = (MEM_reg.curr_deco.is_csr) ? csr_result :
                               (MEM_reg.curr_deco.is_atomic) ? atomic_result : mem_ex_rdata;
 
-    Control_Status_Reg CSRs(
+    Privilege_System priv_sys(
         .clk,
         .reset,
 
@@ -405,7 +400,17 @@ module top
         .csr_rw(MEM_reg.curr_deco.csr_rw),
         .csr_rs(MEM_reg.curr_deco.csr_rs),
         .csr_rc(MEM_reg.curr_deco.csr_rc),
-         
+        
+        .handle_interrupt(),
+        .handle_exception(),
+        .save_pc(WB_reg.curr_pc),
+        .save_priv(curr_priv_mode),
+        .exception_code(),
+
+        .handle_mret(),
+        .handle_sret(),
+        .handle_uret(0), // We don't support user mode
+
         .csr_result(csr_result),
         .mepc_csr,
         
@@ -578,7 +583,7 @@ module top
         .clk,
         .reset,
 
-        .satp(CSRs.satp_csr),
+        .satp(priv_sys.satp_csr),
 
         //I$ ports
         .ic_req_addr(mem_sys_ic_req_addr),  // this is assigned from a signal since it's an input
@@ -596,8 +601,6 @@ module top
 
         .* //slurp all the AXI ports it needs
     );
-
-
 
     always_ff @ (posedge clk) begin //Assert intructions aligned
         if (IF_pc[1:0] != 2'b00) 
