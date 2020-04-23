@@ -125,7 +125,6 @@ module top
     // IF-stage PC logic
     always_ff @ (posedge clk) begin
         if (reset) begin
-            //$display("satp: %x", satp); TODO: SATP now comes from CSR
             $display("Entry: %x", entry);
             IF_pc <= entry;
         end 
