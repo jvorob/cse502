@@ -382,6 +382,8 @@ module top
     logic [63:0] trap_cause;
     logic [63:0] trap_pc;
     logic [63:0] trap_mtval;
+    logic trap_is_ret;
+    logic [1:0] trap_ret_from_priv;
 
     logic [63:0] mem_ex_rdata;   // Properly extended rdata
     logic [63:0] atomic_result;
@@ -412,9 +414,8 @@ module top
         .trap_pc,
         .trap_mtval,
 
-        .handle_mret(WB_reg.curr_deco.is_mret),
-        .handle_sret(WB_reg.curr_deco.is_sret),
-        .handle_uret(0), // We don't support user mode
+        .trap_is_ret,
+        .trap_ret_from_priv,
 
         .handler_addr,
 
@@ -483,7 +484,9 @@ module top
 
         .curr_trapped(trap_en),
         .curr_trap_cause(trap_cause),
-        .curr_trap_val(trap_mtval)
+        .curr_trap_val(trap_mtval),
+        .curr_trap_is_ret(trap_is_ret),
+        .curr_trap_ret_from_priv(trap_ret_from_priv)
     );
 
     // ------------------------BEGIN WB STAGE---------------------------

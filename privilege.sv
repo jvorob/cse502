@@ -27,9 +27,8 @@ module Privilege_System
     input [63:0] trap_pc,       // Write this to the correct xEPC
     input [63:0] trap_mtval,
 
-    input handle_mret,
-    input handle_sret,
-    input handle_uret,
+    input trap_is_ret,
+    input [1:0] trap_ret_from_priv,
 
     output jump_trap_handler,
     output [63:0] handler_addr,
@@ -91,27 +90,29 @@ module Privilege_System
             // New privilege mode is M by default on trap (check medeleg and mideleg to delegate)
             current_mode <= PRIV_M;
         end
-
-        if (handle_mret) begin
-            // must write mepc to pc register. We already do this but maybe refactor the code to do it here
-            csrs[CSR_MSTATUS][3] <= csrs[CSR_MSTATUS][7]; // set mstatus.(mie=3) to mstatus.(mpie=7)
-            csrs[CSR_MSTATUS][7] <= 1; // set mstatus.(mpie=7) to 1
-            current_mode <= csrs[CSR_MSTATUS][12:11]; // output previous privilege (mstatus.(mpp=12:11))
-            csrs[CSR_MSTATUS][12:11] <= PRIV_M; // Set mstatus.(mpp=12:11) to U (or M if user-mode not supported)
-        end
-        else if (handle_sret) begin
-            // must write sepc to pc register.
-            csrs[CSR_SSTATUS][3] <= csrs[CSR_SSTATUS][7]; // set sstatus.(sie=3) to sstatus.(spie=7)
-            csrs[CSR_SSTATUS][7] <= 1; // set sstatus.(spie=7) to 1
-            current_mode <= csrs[CSR_SSTATUS][12:11]; // output previous privilege (sstatus.(spp=12:11))
-            csrs[CSR_SSTATUS][12:11] <= PRIV_M; // Set sstatus.(spp=12:11) to U (or M if user-mode not supported)
-        end
-        else if (handle_uret) begin
-            // must write uepc to pc register.
-            csrs[CSR_USTATUS][3] <= csrs[CSR_USTATUS][7]; // set ustatus.(uie=3) to ustatus.(upie=7)
-            csrs[CSR_USTATUS][7] <= 1; // set ustatus.(upie=7) to 1
-            current_mode <= csrs[CSR_USTATUS][12:11]; // output previous privilege (ustatus.(upp=12:11))
-            csrs[CSR_USTATUS][12:11] <= PRIV_M; // Set ustatus.(upp=12:11) to U (or M if user-mode not supported)
+        
+        if (trap_is_ret) begin
+            if (trap_ret_from_priv == PRIV_M) begin
+                // must write mepc to pc register. We already do this but maybe refactor the code to do it here
+                csrs[CSR_MSTATUS][3] <= csrs[CSR_MSTATUS][7]; // set mstatus.(mie=3) to mstatus.(mpie=7)
+                csrs[CSR_MSTATUS][7] <= 1; // set mstatus.(mpie=7) to 1
+                current_mode <= csrs[CSR_MSTATUS][12:11]; // output previous privilege (mstatus.(mpp=12:11))
+                csrs[CSR_MSTATUS][12:11] <= PRIV_M; // Set mstatus.(mpp=12:11) to U (or M if user-mode not supported)
+            end
+            else if (trap_ret_from_priv == PRIV_S) begin
+                // must write sepc to pc register.
+                csrs[CSR_SSTATUS][3] <= csrs[CSR_SSTATUS][7]; // set sstatus.(sie=3) to sstatus.(spie=7)
+                csrs[CSR_SSTATUS][7] <= 1; // set sstatus.(spie=7) to 1
+                current_mode <= csrs[CSR_SSTATUS][12:11]; // output previous privilege (sstatus.(spp=12:11))
+                csrs[CSR_SSTATUS][12:11] <= PRIV_M; // Set sstatus.(spp=12:11) to U (or M if user-mode not supported)
+            end
+            else if (trap_ret_from_priv == PRIV_U) begin
+                // must write uepc to pc register.
+                csrs[CSR_USTATUS][3] <= csrs[CSR_USTATUS][7]; // set ustatus.(uie=3) to ustatus.(upie=7)
+                csrs[CSR_USTATUS][7] <= 1; // set ustatus.(upie=7) to 1
+                current_mode <= csrs[CSR_USTATUS][12:11]; // output previous privilege (ustatus.(upp=12:11))
+                csrs[CSR_USTATUS][12:11] <= PRIV_M; // Set ustatus.(upp=12:11) to U (or M if user-mode not supported)
+            end
         end
     end
 
@@ -137,15 +138,20 @@ module Privilege_System
     end
 
     always_comb begin
-        is_xret = handle_mret || handle_sret || handle_uret;
-        if (handle_mret) begin
-            epc_addr = csrs[CSR_MEPC];
-        end
-        else if (handle_sret) begin
-            epc_addr = csrs[CSR_SEPC];
-        end
-        else if (handle_uret) begin
-            epc_addr = csrs[CSR_UEPC];
+        is_xret = trap_is_ret;
+        if (trap_is_ret) begin
+            if (trap_ret_from_priv == PRIV_M) begin
+                epc_addr = csrs[CSR_MEPC];
+            end
+            else if (trap_ret_from_priv == PRIV_S) begin
+                epc_addr = csrs[CSR_SEPC];
+            end
+            else if (trap_ret_from_priv == PRIV_U) begin
+                epc_addr = csrs[CSR_UEPC];
+            end
+            else begin
+                epc_addr = 0;
+            end
         end
         else begin
             epc_addr = 0;
