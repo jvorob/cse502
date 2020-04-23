@@ -10,7 +10,10 @@
 #define RAM_SIZE                  (1*GIGA)
 #define INIT_STACK_OFFSET         (4*MEGA)
 #define INIT_STACK_POINTER        (RAM_SIZE - INIT_STACK_OFFSET)
-#define TRACE_WAIT                0x330c00 // in cycles 
+//#define TRACE_WAIT                  0 // start tracing right away
+#define TRACE_WAIT                4 * GIGA // in cycles 
+//#define TRACE_WAIT                0x330c00 // in cycles 
+//#define TRACE_WAIT                0x36000  //in cycles 
 
 /** Current simulation time */
 double sc_time_stamp() {

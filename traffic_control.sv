@@ -11,10 +11,11 @@ module traffic_control(
     input mem_valid,
     input wb_valid,
 
-    // Flush all instructions in the pipeline behind the WB stage
-    input flush_before_wb,
-    input flush_before_mem,
+    // Requests to flush the pipeline (latest takes priority)
+	input flush_before_id,
 	input flush_before_ex,
+    input flush_before_mem,
+    input flush_before_wb,
 
     // If stage_wr_en is also high, causes that stage to clock in a bubble (no instruction)
     output id_gen_bubble,
@@ -81,6 +82,9 @@ module traffic_control(
             // EX will be cleared, but it's currently holding the jump
             // EX may stall, so don't wr_en until it can advance normally
             // jump will re-execute continuously as long as it's stalled
+        end
+        else if (flush_before_id) begin
+            id_gen_bubble = 1; //if ID can advance, it will slurp up a bubble
         end
     end
 endmodule

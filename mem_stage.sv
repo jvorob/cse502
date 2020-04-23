@@ -21,6 +21,8 @@ module MEM_Stage
     output [63:0] mem_ex_rdata,
     output [63:0] atomic_result,
 
+    output force_pipeline_flush, // requests pipeline to be flushed behind MEM stage
+
     // == D$ interface ports
         output logic        dc_en,
         output logic [63:0] dc_in_addr,
@@ -56,6 +58,10 @@ module MEM_Stage
                             (inst.is_store  && !dc_out_write_done) ||
                             (inst.is_atomic && atomic_stall)
                         );
+
+    assign force_pipeline_flush = 0; //TODO: activate this on fences
+
+
     always_comb begin
         
         // This case only matters for stores

@@ -79,6 +79,59 @@ module top
         dbg_tick_counter <= dbg_tick_counter + 1;
     end
 
+
+    /* ================= PIPELINE LOGIC DOCUMENTATIION =========
+     * WIP: (trying to codify and organize the logic of the pipeline stages) -janet
+     *
+     * - registers are IF, ID, EX, MEM, WB
+     * - op currently being processed in EX_stage comes from EX_reg.XXXX, and so on
+     * - a pipe reg can be !XX_reg.valid, in which case its contents are a "bubble"
+     * - an op can be "trapping", i.e. it was excepted or interrupted
+     * - a "trapping" op MUST still be valid, it's NOT A BUBBLE
+     *
+     *
+     *  ==== High-level flow logic (i.e. what we want)
+     *
+     * - typically, an op in a stage moves forward each cycle
+     * - if an op needs to be in stage XX for more than one cycle, it asserts XX_stall
+     *
+     *
+     *  TODO: NOTE: this is not the current signals, this is "ideal signal organization"
+     *
+     *  --- Signals from inside a stage out to pipeline:
+     *  - XX_stall (means this stage hasn't yet finished everything it needed to do to advance)
+     *  - XX_is_trapped (means the op in this stage is excepted/interrupted, will affect behavior)
+     *  - XX_stage.valid (if !valid, means this is empty space and can be overwritten)
+     *
+     *  --- Signals from pipeline into a stage:
+     *  - XX_disable ( means that for whatever reason, this stage should do no work right now 
+     *                 (e.g. disable memory access) )
+     *  - XX_can_advance ( this op is able to advance freely (i.e. it can complete if necessary) )
+     *  - XX_just_entered ( set on first cycle that op is in a stage )
+     *
+     *  --- Other traffic related signals (not clearly in or out)
+     *  - XX_completing ( when XX_valid && !XX_stall && XX_can_advance, i.e. op is leaving the reg )
+     *
+     *
+     *  --- ETC (not traffic control but might be useful)
+     *  - XX_in_data_haz ( means this stage can't use the register values it uses )
+     *
+     *  ==== Low-level flow logic (i.e., how it's implemented)
+     *  - each pipe_reg has inputs wr_en and gen_bubble
+     *  - if !wr_en, the contents of the reg remain in place (don't advance)
+     *  - if wr_en && gen_bubble, at clockedge the reg becomes a bubble (i.e. not valid, zeroed)
+     *  - if (wr_en && !gen_bubble), at clkedge the reg takes in the contents of the previous reg
+     *
+     *  -NOTE: if (AA_stage.wr_en && !BB_stage.wr_en), the op in AA_stage will 
+     *                                                 vanish (since it has nowhere to go)
+     *  -NOTE: if (AA_stage.wr_en && BB_stage.gen_buble), the op in AA_stage will similarly vanish
+     *                                                 (since BB_stage will ignore it's input anyway)
+     */
+
+
+
+
+
     // Traffic controller signals:
     // gen_bubble
     logic if_gen_bubble;
@@ -92,11 +145,6 @@ module top
     logic ex_wr_en;
     logic mem_wr_en;
     logic wb_wr_en;
-
-	// flush signals
-    logic flush_before_wb;	// Used for ecall
-	logic flush_before_mem; // Currently used upon satp modification (in case virtual memory is toggled). Can be used for other things.
-    logic flush_before_ex;	// Used for jumps/branches
 
     // csr register values
     logic [63:0] epc_addr;
@@ -128,6 +176,14 @@ module top
         end 
         
         else if (if_wr_en) begin
+            //TODO: IF_PC logic: (in order of priority)
+            // disabled (don't care what happens, we're waiting for the pipeline to drain)
+            // trap (actually jumping for the trap)
+            // flush before_mem (reexecute)
+            // do_jump
+            // flush_before_ex (reexecute)
+            // flush_before_id (reexecute)
+            //
 
             if (is_xret) begin
                 IF_pc <= epc_addr & ~64'b011;
@@ -155,10 +211,10 @@ module top
             else if (flush_before_ex) begin 
                 if(!EX_reg.valid) $error("ERROR: flush_before_ex expects inst in EX, found bubble");
 
-                if (do_jump) 
+                if (EX_do_jump) 
                     IF_pc <= jump_target_address;
                 else 
-                    $error("ERROR: We should only flush_before_ex if do_jump is high"); 
+                    $error("ERROR: We should only flush_before_ex if EX_do_jump is high"); 
             end
 
             // Default PC logic: advance:  
@@ -299,7 +355,7 @@ module top
 
     // Jump logic
     logic [63:0] jump_target_address;
-    logic do_jump;
+    logic EX_do_jump;
 
     // mask off bottommost bit of jump target: (according to RISCV spec)
     assign jump_target_address = (EX_deco.jump_absolute ? alu_out : (EX_reg.curr_pc + EX_deco.immed)) & ~64'b1;
@@ -307,18 +363,12 @@ module top
     //Deciding whether to jump
     always_comb begin
         case (EX_deco.jump_if) inside
-			JUMP_NO:		do_jump = 0;
-			JUMP_YES:		do_jump = 1;
-			JUMP_ALU_EQZ:	do_jump = (alu_out == 0);
-			JUMP_ALU_NEZ:	do_jump = (alu_out != 0);
+			JUMP_NO:		EX_do_jump = 0;
+			JUMP_YES:		EX_do_jump = 1;
+			JUMP_ALU_EQZ:	EX_do_jump = (alu_out == 0);
+			JUMP_ALU_NEZ:	EX_do_jump = (alu_out != 0);
         endcase
 		
-        if (dbg_termination_counter != 1) begin
-    		flush_before_ex = do_jump;
-        end
-        else begin
-            flush_before_ex = 0;
-        end
     end
 
 
@@ -328,7 +378,7 @@ module top
 
     //Deciding EXEC_stage output
     always_comb begin
-        if (do_jump) begin // Jumps store return addr (pc+4)
+        if (EX_do_jump) begin // Jumps store return addr (pc+4)
             exec_result = EX_reg.curr_pc + 4 ; //(For JAL/JALR. Branches will discard it anyway)
 
         end else if (EX_deco.keep_pc_plus_immed) begin //FOR AUIPC
@@ -370,7 +420,7 @@ module top
         .curr_data(),
         .curr_data2(),
 
-        .next_do_jump(do_jump),
+        .next_do_jump(EX_do_jump),
         .next_jump_target(jump_target_address),
         .curr_do_jump(),
         .curr_jump_target()
@@ -424,7 +474,7 @@ module top
         .is_xret,
         .epc_addr,
 
-        .modifying_satp(flush_before_mem),
+        .modifying_satp(),
         .curr_priv_mode
     );
 
@@ -442,6 +492,8 @@ module top
         
         .mem_ex_rdata(mem_ex_rdata),
         .atomic_result,
+
+        .force_pipeline_flush(),
 
         // === D$ interface (passed to MemorySystem)
         .dc_en            (),  // input ports get read in at MemorySystem instantiation
@@ -520,8 +572,6 @@ module top
 		.stall()
 	);
 
-    assign flush_before_wb = WB_reg.curr_deco.is_ecall; //TODO: ONLY FOR THE ECALL HACK
-    //TODO: figure out a better place to put this signal
 
     always_comb begin
         if (WB_reg.valid && !ecall_stall && WB_reg.curr_do_jump) begin
@@ -554,11 +604,49 @@ module top
 
     );
 
+
+
+    // ============== FLUSHING LOGIC
+    
+    // doing jump
+    // MEM force flush (for sfences or CSRs)
+    logic MEM_force_flush = 0; //TODO: temp
+
+    logic IF_is_trap;
+    logic ID_is_trap;
+    logic EX_is_trap;
+    logic MEM_is_trap;
+    logic WB_is_trap;
+
+
+    logic flush_before_id;
+    logic flush_before_ex;
+    logic flush_before_mem;
+    logic flush_before_wb;
+    
+    logic IF_disable;
+    assign IF_disable = (IF_is_trap || ID_is_trap || EX_is_trap || MEM_is_trap);
+
+    assign flush_before_id  = ID_is_trap  || 0;
+    assign flush_before_ex  = EX_is_trap  || EX_do_jump;
+    assign flush_before_mem = MEM_is_trap || mem_stage.force_pipeline_flush || priv_sys.modifying_satp;
+    assign flush_before_wb  = WB_is_trap;  // THIS SHOULD NEVER FLUSH OUT AN OP FROM MEM
+
+    always_comb begin  // THROW IN SOME ASSERTS TO WARN US IF WE MESS UP
+        if (flush_before_wb && WB_reg.valid)
+            $error("ERROR: we should never flush an op out of MEM due to safety concerns");
+        // MEM stage cant be flushed safely since it might have WIP ops with side effects
+    end
+
+    //assign flush_before_wb = WB_reg.curr_deco.is_ecall; //TODO OLD: ONLY FOR THE ECALL HACK
+
+    
+
     traffic_control traffic(
         // Inputs (stalls from hazard unit)
-        .if_stall(IF_stall), //IF doesn't get data dependencies, stalls on Icache
+        .if_stall(IF_stall),
         .id_stall(ID_stall),
-        .ex_stall(0),
+        .ex_stall(0),  //EX is always single cycle
         .mem_stall(mem_stage.stall),
         .wb_stall(wb_stage.stall),
 
@@ -568,9 +656,10 @@ module top
         .mem_valid(MEM_reg.valid),
         .wb_valid (WB_reg.valid),
 
-        .flush_before_wb(flush_before_wb),
-        .flush_before_mem(flush_before_mem),
-		.flush_before_ex(flush_before_ex),
+		.flush_before_id,
+		.flush_before_ex,
+        .flush_before_mem,
+        .flush_before_wb,
 
         // Output gen bubbles
         // IF should never get a bubble, we always have some intruction we're trying to fetch
