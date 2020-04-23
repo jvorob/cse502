@@ -23,6 +23,13 @@ module MEM_Stage
 
     output force_pipeline_flush, // requests pipeline to be flushed behind MEM stage
 
+
+    //=== Trap inputs/outputs
+    input op_trapped,
+    output         gen_trap,
+    output  [63:0] gen_trap_cause,
+    output  [63:0] gen_trap_val,
+
     // == D$ interface ports
         output logic        dc_en,
         output logic [63:0] dc_in_addr,
@@ -53,13 +60,13 @@ module MEM_Stage
 
 
     logic atomic_stall; //this gets set by the atomic state machine, if we're in an atomic op
-    assign stall = !is_bubble &&  (
+    assign stall = !is_bubble && !op_trapped &&  (
                             (inst.is_load   && !dc_out_rvalid) || 
                             (inst.is_store  && !dc_out_write_done) ||
                             (inst.is_atomic && atomic_stall)
                         );
 
-    assign force_pipeline_flush = 0; //TODO: activate this on fences
+    assign force_pipeline_flush = inst.is_sfence_vma; // TODO: need to empty out TLBs
 
 
     always_comb begin
@@ -85,12 +92,12 @@ module MEM_Stage
             F3LS_WU: mem_ex_rdata = { 32'd0, mem_rdata_shifted[31:0] };
             default: begin
                 mem_ex_rdata = 0;
-                if(!is_bubble && inst.is_load)
+                if(!is_bubble && !op_trapped && inst.is_load)
                     $error("Unexpected funct3 in mem_stage load: %b\n", inst.funct3);
             end
         endcase
 
-        if (inst.is_atomic && !is_bubble) begin
+        if (inst.is_atomic && !is_bubble && !op_trapped) begin
             if (atomic_state != 2)
                 atomic_stall = 1;
             else
@@ -122,7 +129,7 @@ module MEM_Stage
             dc_write_en = inst.is_store;
             dc_in_wdata = mem_wr_data;
             atomic_result = 'bx;
-            dc_en = (inst.is_load || inst.is_store) && !is_bubble;
+            dc_en = (inst.is_load || inst.is_store) && !is_bubble && !op_trapped;
         end
     end
     
@@ -131,7 +138,7 @@ module MEM_Stage
             atomic_state <= 0;
         end
         else if (atomic_state == 0) begin
-            if (!is_bubble && inst.is_atomic) begin
+            if (!is_bubble && !op_trapped && inst.is_atomic) begin
                 if (dc_out_rvalid) begin
                     // load or binary op
                     load_result <= mem_ex_rdata;

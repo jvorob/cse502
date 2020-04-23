@@ -53,7 +53,7 @@ typedef struct packed {
     Privilege_Mode trap_ret_priv; // which of mret sret uret is it
 
     logic is_wfi;
-    //logic is_sfence_vma; //TODO
+    logic is_sfence_vma; 
 
     // Atomic Instructions
     logic is_atomic;
@@ -73,7 +73,13 @@ module Decoder
     input [31:0] inst,
     input valid,
     input [63:0] pc,
-    output decoded_inst_t out
+    output decoded_inst_t out,
+
+
+    // == Can generate traps on illegal instructions
+    output         gen_trap,
+    output  [63:0] gen_trap_cause,
+    output  [63:0] gen_trap_val
 );
 
 
@@ -121,6 +127,7 @@ module Decoder
         out.funct7 = inst[31:25]; // branches, adds, etc
         out.immed = 0;
 
+
         // ====== SPECIAL SIGNALS
         
         //(for AUIPC, we already compute ALU_result+PC, mux that into exec-stage result)
@@ -151,6 +158,13 @@ module Decoder
         out.is_atomic = 0;
         out.alu_op = 0;
         out.is_swap = 0;
+
+
+        //Trap handling
+        gen_trap = 0;
+        gen_trap_val = 0;
+        gen_trap_cause = 0;
+
 
         // === MAIN DECODER:
         // Determine immediate values, and which of rs1,rs2,and rd we're using
@@ -329,10 +343,12 @@ module Decoder
                         else if (immed_I == 12'b0001_0000_0010) begin // SRET
                             out.is_trap_ret = 1;
                             out.trap_ret_priv = PRIV_S;
+                            gen_trap = 1;
                         end
                         else if (immed_I == 12'b0011_0000_0010) begin // MRET
                             out.is_trap_ret = 1;
                             out.trap_ret_priv = PRIV_M;
+                            gen_trap = 1;
                         end
                         else if (immed_I == 12'b0001_0000_0101) begin
                             // WFI
@@ -342,7 +358,8 @@ module Decoder
                         end
                         else if (funct7 == 7'b000_1001) begin
                             // TODO: needs to invalidate TLB
-                            $error("NOT FULLY IMPLEMENTED: sfence.vma, inst=%x, pc=%x", inst, pc);
+                            out.is_sfence_vma = 1;
+                            $display("NOT FULLY IMPLEMENTED: sfence.vma NEED TO DUMP TLB, inst=%x, pc=%x", inst, pc);
                         end
                         else if (funct7 == 7'b001_0001) begin
                             $error("NOT IMPLEMENTED hfence.bvma, inst=%x, pc=%x", inst, pc);

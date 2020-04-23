@@ -146,11 +146,7 @@ module top
     logic mem_wr_en;
     logic wb_wr_en;
 
-    // csr register values
-    logic [63:0] epc_addr;
-    logic is_xret;
-    logic [63:0] handler_addr;
-    logic jump_trap_handler;
+
     logic [1:0] curr_priv_mode;
 
 
@@ -160,12 +156,23 @@ module top
     logic [31:0] IF_inst;
     logic IF_inst_valid; //if cache output is valid
 
+    logic IF_disable; // IF should sit quiet if we're waiting for traps to drain
+    assign IF_disable = trap_in_pipeline; //Make sure we disable both input and output
+
+    logic IF_stall;
+    assign IF_stall = !IF_inst_valid;
+
     // Note: we have if_wr_en to update IF_pc, but that doesn't mean we're
     // executing the instruction currently in IF. That only happens when the
     // instruction currently in IF goes into the pipeline, which happens
     // when ID reg is taking in a fresh instruction
     logic IF_is_executing;
     assign IF_is_executing = id_wr_en && !id_gen_bubble;
+
+
+    logic        IF_gen_trap = 0; //TODO: trap gen
+    logic [63:0] IF_gen_trap_cause = 0;
+    logic [63:0] IF_gen_trap_val   = 0;
 
 
     // IF-stage PC logic
@@ -177,7 +184,8 @@ module top
         
         else if (if_wr_en) begin
             //TODO: IF_PC logic: (in order of priority)
-            // if IF_disabled, we don't care what happens, we're waiting for the pipeline to drain)
+            // if IF is disabled (i.e. there's a trap in the pipeline, we
+            // don't care what happens
 
             // - These are the conditions, in order
             // - Conditions closer to the end of the pipeline take priority,
@@ -187,11 +195,11 @@ module top
             // - Can handle re-executing on a flush to any stage, even though
             //   we don't use most of them (just for completeness)
 
-            if (is_xret) begin                  // ===== Handle trap-related jumps
-                IF_pc <= epc_addr & ~64'b011;
+            if (priv_sys.is_xret) begin        // ===== Handle trap-related jumps
+                IF_pc <= priv_sys.epc_addr & ~64'b011;
             end
-            else if (jump_trap_handler) begin
-                IF_pc <= handler_addr;
+            else if (priv_sys.jump_trap_handler) begin
+                IF_pc <= priv_sys.handler_addr;
             end
 
             else if (flush_before_wb) begin     // === (this should never happen)
@@ -226,7 +234,9 @@ module top
 
     // ==== send I$ requests into memory system
     logic [63:0] mem_sys_ic_req_addr; //cant assign directly to input of module, so do this instead
+    logic mem_sys_ic_en;
     assign mem_sys_ic_req_addr = (IF_pc);
+    assign mem_sys_ic_en = !IF_disable; 
     assign IF_inst_valid = (mem_sys.ic_resp_valid);
     assign IF_inst =       (mem_sys.ic_resp_inst);
 
@@ -238,7 +248,7 @@ module top
 
         //traffic signals
         .wr_en(id_wr_en),
-        .gen_bubble(id_gen_bubble),
+        .gen_bubble(id_gen_bubble || IF_disable),
         .valid(),
 
         // incoming signals for next step's ID
@@ -247,10 +257,25 @@ module top
 
         // outgoing signals for current ID stage
         .curr_pc(),
-        .curr_inst()
+        .curr_inst(),
+
+        // === Trap signals
+        .next_trapped   (IF_gen_trap),
+        .next_trap_cause(IF_gen_trap ? IF_gen_trap_cause : 0),
+        .next_trap_val  (IF_gen_trap ? IF_gen_trap_val   : 0),
+        .curr_trapped(),
+        .curr_trap_cause(),
+        .curr_trap_val()
     );
 
     // ------------------------BEGIN ID STAGE--------------------------
+
+    logic ID_stall;
+    assign ID_stall = haz.data_hazard_ID;
+    
+    logic        ID_gen_trap; // Set in decoder
+    logic [63:0] ID_gen_trap_cause;
+    logic [63:0] ID_gen_trap_val;
 
     // Components decoded from IF_inst, set by decoder
     decoded_inst_t ID_deco; 
@@ -259,7 +284,11 @@ module top
         .inst(ID_reg.curr_inst),
         .valid(ID_reg.valid),
         .pc(ID_reg.curr_pc),
-        .out(ID_deco)
+        .out(ID_deco),
+
+        .gen_trap(ID_gen_trap),
+        .gen_trap_cause(ID_gen_trap_cause),
+        .gen_trap_val(ID_gen_trap_val)
     );
     
     // Register file
@@ -274,7 +303,7 @@ module top
 	logic [63:0] WB_result;
 	logic [4:0] WB_rd;
 	logic WB_en_rd;
-    assign writeback_en = WB_reg.valid && !wb_stage.stall && WB_en_rd; 
+    assign writeback_en = WB_reg.valid && !WB_reg.curr_trapped && !wb_stage.stall && WB_en_rd; 
     // only wb on a valid instruction, not stalled (i.e. completed)
     // and which actually has something to writeback (en_rd)
     //TODO: change this to be WB_complete
@@ -318,18 +347,29 @@ module top
         .next_val_rs1(ID_out1),
         .next_val_rs2(ID_out2),
 
-
         // Data signals for current EX step
         .curr_pc(),
         .curr_deco(),
         .curr_val_rs1(),
-        .curr_val_rs2()
+        .curr_val_rs2(),
+
+        // === Trap signals
+        .next_trapped   (ID_gen_trap || ID_reg.curr_trapped),
+        .next_trap_cause(ID_gen_trap ? ID_gen_trap_cause : ID_reg.curr_trap_cause), 
+        .next_trap_val  (ID_gen_trap ? ID_gen_trap_val   : ID_reg.curr_trap_val), 
+        .curr_trapped(),
+        .curr_trap_cause(),
+        .curr_trap_val()
     );
 
     // -----------------------BEGIN EX STAGE----------------------------
 
     decoded_inst_t EX_deco;
     assign EX_deco = EX_reg.curr_deco;
+
+    logic        EX_gen_trap = 0; //TODO: trap gen
+    logic [63:0] EX_gen_trap_cause = 0;
+    logic [63:0] EX_gen_trap_val   = 0;
 
     // == ALU signals
     logic [63:0] alu_out;
@@ -423,7 +463,16 @@ module top
         .next_do_jump(EX_do_jump),
         .next_jump_target(jump_target_address),
         .curr_do_jump(),
-        .curr_jump_target()
+        .curr_jump_target(),
+
+
+        // === Trap signals
+        .next_trapped   (EX_gen_trap || EX_reg.curr_trapped),
+        .next_trap_cause(EX_gen_trap ? EX_gen_trap_cause : EX_reg.curr_trap_cause), 
+        .next_trap_val  (EX_gen_trap ? EX_gen_trap_val   : EX_reg.curr_trap_val), 
+        .curr_trapped(),
+        .curr_trap_cause(),
+        .curr_trap_val()
     );
 
     // ------------------------BEGIN MEM STAGE--------------------------
@@ -439,6 +488,8 @@ module top
     assign mem_stage_result = (MEM_reg.curr_deco.is_csr) ? csr_result :
                               (MEM_reg.curr_deco.is_atomic) ? atomic_result : mem_ex_rdata;
 
+    //TODO: move priv_sys instantiation out of mem_stage section into
+    //other-modules section
     Privilege_System priv_sys(
         .clk,
         .reset,
@@ -478,13 +529,21 @@ module top
         .clk,
         .reset,
 
+        //inputs
         .inst(MEM_reg.curr_deco),
         .ex_data(MEM_reg.curr_data),
         .ex_data2(MEM_reg.curr_data2),
         .is_bubble(!MEM_reg.valid),
-        .advance(mem_wr_en),
+        .advance(mem_wr_en), //TODO: this might be incorrect if wb can stall
 
+        .op_trapped(MEM_reg.curr_trapped), // was the incoming instruction trapped from prev stage
+
+        //outputs
         .stall(),
+        
+        .gen_trap(), //did this stage generate a trap
+        .gen_trap_cause(),
+        .gen_trap_val(),
         
         .mem_ex_rdata(mem_ex_rdata),
         .atomic_result,
@@ -530,6 +589,10 @@ module top
         .curr_do_jump(),
         .curr_jump_target(),
 
+        // === Trap signals
+        .next_trapped   (mem_stage.gen_trap || MEM_reg.curr_trapped),
+        .next_trap_cause(mem_stage.gen_trap ? mem_stage.gen_trap_cause : MEM_reg.curr_trap_cause), 
+        .next_trap_val  (mem_stage.gen_trap ? mem_stage.gen_trap_val   : MEM_reg.curr_trap_val), 
         .curr_trapped(),
         .curr_trap_cause(),
         .curr_trap_val()
@@ -577,11 +640,6 @@ module top
     
     // -------Modules outside of pipeline (e.g. hazard detection)-------
     
-    logic IF_stall;
-    assign IF_stall = !IF_inst_valid;
-    logic ID_stall;
-    assign ID_stall = haz.data_hazard_ID;
-    
     hazard_unit haz(
         .ID_deco(ID_deco),
         .EX_deco(EX_deco),
@@ -611,6 +669,11 @@ module top
     logic EX_is_trap;
     logic MEM_is_trap;
     logic WB_is_trap;
+    assign IF_is_trap  = IF_gen_trap;
+    assign ID_is_trap  = ID_gen_trap || ID_reg.curr_trapped;
+    assign EX_is_trap  = EX_gen_trap || EX_reg.curr_trapped;
+    assign MEM_is_trap = mem_stage.gen_trap || MEM_reg.curr_trapped;
+    assign WB_is_trap  = WB_reg.curr_trapped;
 
 
     logic flush_before_id;
@@ -618,18 +681,18 @@ module top
     logic flush_before_mem;
     logic flush_before_wb;
     
-    logic IF_disable;
-    assign IF_disable = (IF_is_trap || ID_is_trap || EX_is_trap || MEM_is_trap);
+    logic trap_in_pipeline;
+    assign trap_in_pipeline = (IF_is_trap || ID_is_trap || EX_is_trap || MEM_is_trap || WB_is_trap);
 
     assign flush_before_id  = ID_is_trap  || 0;
     assign flush_before_ex  = EX_is_trap  || EX_do_jump;
     assign flush_before_mem = MEM_is_trap || mem_stage.force_pipeline_flush || priv_sys.modifying_satp;
     assign flush_before_wb  = WB_is_trap;  // THIS SHOULD NEVER FLUSH OUT AN OP FROM MEM
 
-    always_comb begin  // THROW IN SOME ASSERTS TO WARN US IF WE MESS UP
-        if (flush_before_wb && WB_reg.valid)
-            $error("ERROR: we should never flush an op out of MEM due to safety concerns");
-        // MEM stage cant be flushed safely since it might have WIP ops with side effects
+    always_ff @ (posedge clk) begin  // WARN US IF WE ACCIDENTALLY TRY TO FLUSH SOMETHING FROM MEM
+        if (flush_before_wb && MEM_reg.valid)
+            $error("ERROR: we should never flush an op out of MEM because of side effects");
+        // MEM stage cant be flushed safely since it might have WIP ops
     end
 
     //assign flush_before_wb = WB_reg.curr_deco.is_ecall; //TODO OLD: ONLY FOR THE ECALL HACK
@@ -650,6 +713,7 @@ module top
         .mem_valid(MEM_reg.valid),
         .wb_valid (WB_reg.valid),
 
+        //inputs
 		.flush_before_id,
 		.flush_before_ex,
         .flush_before_mem,
