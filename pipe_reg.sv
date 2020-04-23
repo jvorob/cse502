@@ -35,10 +35,12 @@ module ID_reg(
     // Data signals coming in from IF
     input [63:0] next_pc,
     input [63:0] next_inst,
+    input next_is_trapped,
 
     // Data signals for current ID step
     output [63:0] curr_pc, //instruction not yet decoded, so pass this in separately
-    output [63:0] curr_inst
+    output [63:0] curr_inst,
+    output curr_is_trapped
 );
     always_ff @(posedge clk) begin
         if (reset == 1) begin
@@ -78,7 +80,7 @@ module EX_reg(
     input decoded_inst_t next_deco, // includes pc & immed
     input [63:0]         next_val_rs1,
     input [63:0]         next_val_rs2,
-
+    input next_is_trapped,
 
     // Data signals for current EX step
     output [63:0]         curr_pc,
@@ -130,6 +132,7 @@ module MEM_reg(
     input decoded_inst_t next_deco, // includes pc & immed
     input [63:0]         next_data,  // result from ALU or other primary value
     input [63:0]         next_data2, // extra value if needed (e.g. for stores, etc)
+    input next_is_trapped,
 
     // Data signals for current MEM step
     output [63:0] curr_pc,
