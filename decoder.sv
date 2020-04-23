@@ -328,33 +328,38 @@ module Decoder
                         else if (immed_I == 12'b010) begin
                             // URET
                             out.is_uret = 1;
+                            $error("NOT IMPLEMENTED: uret, inst=%x, pc=%x", inst, pc); //TODO
                         end
                         else if (immed_I == 12'b0001_0000_0010) begin
                             // SRET
                             out.is_sret = 1;
+                            $error("NOT IMPLEMENTED: sret, inst=%x, pc=%x", inst, pc); //TODO
                         end
                         else if (immed_I == 12'b0011_0000_0010) begin
                             // MRET
                             out.is_mret = 1;
                             out.jump_if = JUMP_YES;
+                            //TODO: do this properly
                             $display("mret, inst=%x, pc=%x", inst, pc);
                         end
                         else if (immed_I == 12'b0001_0000_0101) begin
                             // WFI
-                            out.is_wfi = 1;
+                            // spec allows WFI to be a noop
+                            out.is_wfi = 1; //TODO: we should be able to get rid of all this logic
                             $display("wfi, inst=%x, pc=%x", inst, pc);
                         end
                         else if (funct7 == 7'b000_1001) begin
-                            $display("sfence.vma, inst=%x, pc=%x", inst, pc);
+                            // TODO: needs to invalidate TLB
+                            $error("NOT FULLY IMPLEMENTED: sfence.vma, inst=%x, pc=%x", inst, pc);
                         end
                         else if (funct7 == 7'b001_0001) begin
-                            $display("hfence.bvma, inst=%x, pc=%x", inst, pc);
+                            $error("NOT IMPLEMENTED hfence.bvma, inst=%x, pc=%x", inst, pc);
                         end
                         else if (funct7 == 7'b101_0001) begin
-                            $display("hfence.gvma, inst=%x, pc=%x", inst, pc);
+                            $error("NOT IMPLEMENTED hfence.gvma, inst=%x, pc=%x", inst, pc);
                         end
                         else begin
-                            $display("Invalid instruction for opcode=OP_SYSTEM and funct3=F3_ECALL_EBREAK.");
+                            $error("Invalid instruction for opcode=OP_SYSTEM and funct3=F3_ECALL_EBREAK.");
                         end
 					end
                     F3SYS_CSRRW: begin
