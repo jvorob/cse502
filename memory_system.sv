@@ -18,10 +18,12 @@ module MemorySystem
     input clk,
     input reset,
     
+    //=== Special inputs
     input  logic [63:0] satp, //current value of SATP CSR
+    input  logic [1:0]  curr_priv_mode, //M/S/U //TODO
 
     //=== External I$ interface
-    input  logic        ic_en,   //TODO: this is unused right now?
+    input  logic        ic_en,
     input  logic [63:0] ic_req_addr,
     output logic [31:0] ic_resp_inst,
     output logic        ic_resp_valid,
@@ -82,6 +84,12 @@ module MemorySystem
 );
 
 
+    // ====================================
+    //
+    //          SATP Mode Handling
+    //
+    // ====================================
+
     // === SATP decode
     logic [3:0] satp_mode;
     logic [15:0] satp_asid;
@@ -108,10 +116,18 @@ module MemorySystem
     assign root_pt_addr = { satp_ppn, 12'b0 };
 
 
-    /* Structure overview:
-     *   I$_in ports
-     *   D$_in ports
+    // ====================================
+    //
+    //          Main memory wiring
+    //
+    // ====================================
+
+    /*  ============= Structure overview:
+     *  --- Interface to pipeline:
+     *   I$_in, I$_out ports
+     *   D$_in, D$_out ports
      *
+     *  --- Interface to pipeline:
      *   I$_in -> I$.port
      *   if virtual: 
      *      I$_in -> ITLB, ITLB -> I$.translated
@@ -185,12 +201,12 @@ module MemorySystem
             .clk, 
             .reset,
         
-            .virtual_mode   (virtual_en), // virtual-mode enable
-
-            .in_fetch_addr  (ic_req_addr),
-            .out_inst       (ic_resp_inst),
+            .in_fetch_addr  (ic_req_addr),  //In
+            .icache_enable  (ic_en),
+            .out_inst       (ic_resp_inst), //Out
             .icache_valid   (ic_resp_valid),
 
+            .virtual_mode   (virtual_en),           // virtual-mode enable
             .translated_addr       (itlb.pa),       //translation from I-TLB
             .translated_addr_valid (itlb.pa_valid), 
 

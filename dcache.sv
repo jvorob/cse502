@@ -21,10 +21,12 @@ module Dcache
     input                 dcache_enable,
     input                 wrn, // write = 1 / read = 0
     input                 virtual_mode, // determines "in_addr" is virtual or physical
+
     output  reg  [63:0]   rdata,
     output  reg           dcache_valid,
     output  reg           write_done,
 
+    // (TLB port)
     input        [63:0]   translated_addr,
     input                 translated_addr_valid,
 
