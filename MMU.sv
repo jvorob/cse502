@@ -65,6 +65,9 @@ module MMU
     // == Set once per request
     logic curr_port; //0 is serving port1, 1 is serving port2
     logic [63:0] translate_addr;  //this is the address we're trying to translate
+    logic [63:0] translate_root_pt;  //this is SATP pointer we were translating for
+                                     // Use this to invalidate responses on
+                                     // changes in SATP
 
     logic [63:0] final_pte; // this will hold the leaf_pte when we're done walking the tree
 
@@ -119,11 +122,13 @@ module MMU
             resp_data_addr = leafToTranslatedAddress(final_pte, translate_addr_vpn, curr_level);
 
             if (curr_port == 0)
-                // Don't say we're valid if the requested address changes suddenly
-                resp0_valid = translate_addr[63:12] == req0_addr[63:12];
+                // Don't say we're valid if the requested address or SATP changes suddenly
+                resp0_valid = (translate_addr[63:12] == req0_addr[63:12]) &&
+                              (translate_root_pt[63:0] == root_pt_addr[63:0]); 
             else
-                // Don't say we're valid if the requested address changes suddenly
-                resp1_valid = translate_addr[63:12] == req1_addr[63:12];
+                // Don't say we're valid if the requested address or SATP changes suddenly
+                resp1_valid = (translate_addr[63:12] == req1_addr[63:12]) &&
+                              (translate_root_pt[63:0] == root_pt_addr[63:0]); 
         end
     end
 
@@ -149,6 +154,9 @@ module MMU
                         //req 0 takes priority over 1
                         translate_addr <= req0_valid ? req0_addr : req1_addr;
                         curr_port <= req0_valid ? 0 : 1;
+
+                        //Save curr root_pt pointer for this request so we can see if SATP value changes
+                        translate_root_pt <= root_pt_addr;
 
                         // == Initialize fetch to root of page table
                         curr_level <= LEVELS-1;
