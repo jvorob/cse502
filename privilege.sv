@@ -40,7 +40,7 @@ module Privilege_System
     output [REG_WIDTH-1:0] satp_csr,
 
     output modifying_satp,
-    output curr_priv_mode
+    output [1:0] curr_priv_mode
 );
     logic [1:0] current_mode;   // Current privilege mode
     logic [REG_WIDTH-1:0] csrs [0:CSR_COUNT-1]; // The CSR registers
