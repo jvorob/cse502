@@ -9,7 +9,7 @@ typedef struct packed {
     logic exec;
     logic write;
     logic read;
-    logic valid;    //should always be 1 once we get it out of the pagetable
+    logic valid;    // WILL BE SET TO 0 ON PAGE FAULT
 } tlb_perm_bits;
 
 
@@ -40,7 +40,7 @@ module MMU
     // ====== Response (to I/D TLB)
     output logic [63:0]          resp_data_addr,  // the translated address
     output tlb_perm_bits         resp_data_perms, // that pages' permission bits
-    // output logic                 mmu_busy, //might be useful to have? we only latch in a req once
+    // IF ENCOUNTERING A PAGE FAULT, resp_data_perms.valid == 0 !
 
     // response valid signals
     output logic                 resp0_valid, // if data is for port 0
@@ -161,26 +161,35 @@ module MMU
                     // wait until we get some data back
                     if (dcache_resp_valid) begin
 
-                        // === Error checking
-                        if (!dcache_resp_v) //check pte valid bit
-                            $error("Error, invalid PTE at %x", curr_pt_addr);
-                        if (dcache_resp_w && !dcache_resp_r)
-                            $error("Error, PTE has write && !read at %x", curr_pt_addr);
+                        // === Check if invalid entry (i.e. page fault)
+                        if (!dcache_resp_v || (dcache_resp_w && !dcache_resp_r)) begin
+                            //check pte valid bit, check valid values of W and R
+                            $display("MMU: invalid PTE at %x, PTE:%x", curr_pt_addr, dcache_resp_data);
+
+                            state <= MMU_DONE;
+                            final_pte <= 0; //Invalid PTE, page fault
+                        end
 
 
+                        // === If pointer and we fall of the tree, page fault
+                        else if ((!dcache_resp_r && !dcache_resp_w && !dcache_resp_x)
+                                                                && curr_level == 0)  begin
 
-                        // === If pointer: follow it
-                        if (!dcache_resp_r && !dcache_resp_w && !dcache_resp_x) begin
-                            if (curr_level == 0)
-                                $error("Error: fell off page table at %x", curr_pt_addr);
+                            $display("MMU: fell off page table at %x", curr_pt_addr);
+                            state <= MMU_DONE;
+                            final_pte <= 0; //Invalid PTE, page fault
+                        end 
 
+                        // === Else, follow the pointer
+                        else if (!dcache_resp_r && !dcache_resp_w && !dcache_resp_x) begin
+                                
                             // physical address is bits 53:8 of PTE, with a 12-bit offset
                             curr_pt_addr <= { dcache_resp_data[53:10], 12'b0 };
                             curr_level <= curr_level - 1;
+                        end
 
-
-                        // === If leaf: store pte, go to done
-                        end else begin
+                        // === Else it's a leaf: store final pte, go to done
+                        else begin
                             //ppn comes from pte
                             //if superpage, lower bits come from virt address
                             state <= MMU_DONE;
@@ -190,23 +199,8 @@ module MMU
                 end
 
                 MMU_DONE: begin
-                    //  // TEMP HACK: as long as we don't have TLB, we can save
-                    //  // performance by staying on a given page as long as
-                    //  // people want translations from it
-                    //  
-                    //  // If we're currently serving port0, stay done as long as it needs
-                    //  if (req0_valid && (curr_port == 0) && req0_addr[63:12] == translate_addr[63:12])
-                    //      ;// stay in done mode
-
-                    //  // If we're currently serving port1, stay done
-                    //  // however, yield to port0
-                    //  else if (req1_valid && (curr_port == 1) && !req0_valid && req1_addr[63:12] == translate_addr[63:12])
-                    //      ;// stay in done mode
-
-                    //  else 
-
                     //Stays on Done for 1 cycle to output result
-                    //TODO: As an optimization, we can make this happen once cycle earlier
+                    //TODO: As an optimization, we could make this happen once cycle earlier
                     state <= MMU_IDLE;
                 end
 

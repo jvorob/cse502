@@ -100,13 +100,20 @@ module Dtlb
             end
         end
         else if (state == 1) begin
-            if (resp_valid) begin
-               tlb_vas[rplc_index][0] <= requested_va[VPN_UPPER:VPN_LOWER];
-               tlb_pas[rplc_index][0] <= resp_addr[PPN_UPPER:PPN_LOWER];
-               perms[rplc_index][0] <= resp_perm_bits;
-               valid_entry[rplc_index][0] <= 1;
-               req_valid <= 0;
-               state <= 0;
+            if (resp_valid) begin //Wait until MMU sends a response
+                
+                // NOTE: response might be all zeroes (in the case of a page fault)
+                
+                //Write the response entry into our cache
+                tlb_vas[rplc_index][0] <= requested_va[VPN_UPPER:VPN_LOWER];
+                tlb_pas[rplc_index][0] <= resp_addr[PPN_UPPER:PPN_LOWER];
+                perms[rplc_index][0] <= resp_perm_bits;
+                valid_entry[rplc_index][0] <= 1;
+
+                //Switch back to idle mode
+                req_valid <= 0;
+                state <= 0;
+
             end
         end
     end

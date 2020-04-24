@@ -36,6 +36,12 @@ typedef enum bit[1:0] {
     PRIV_RESERVED = 2
 } Privilege_Mode;
 
+typedef enum bit[63:0] {
+    MCAUSE_PAGEFAULT_I = 12,
+    MCAUSE_PAGEFAULT_L = 13,
+    MCAUSE_PAGEFAULT_S = 15
+} Mcause_Code;
+
 // CSRs come in this order: User, Supervisor, Machine
 typedef enum bit[11:0] {
     // User Trap Setup

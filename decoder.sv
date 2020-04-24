@@ -151,9 +151,11 @@ module Decoder
 
         out.alu_nop = 0;
 
+        // priv
         out.is_trap_ret = 0;
         out.trap_ret_priv = 0;
         out.is_wfi = 0;
+        out.is_sfence_vma = 0;
 
         out.is_atomic = 0;
         out.alu_op = 0;
@@ -324,6 +326,8 @@ module Decoder
                         1010001 rs2   rs1   000 00000 1110011 HFENCE.GVMA
                         */
                         if (immed_I == 0) begin
+                            $error("ECALL: not implemented, inst=%x, pc=%x", inst, pc);
+                            //TODO: update this to use thte trap mechanism
                             out.is_ecall = 1;
                             
                             // As specified for the fake-os hack, write ecall() returned results to
@@ -333,6 +337,7 @@ module Decoder
                         end
                         else if (immed_I == 1) begin
                             // ebreak
+                            $error("EBREAK: not implemented, inst=%x, pc=%x", inst, pc);
                             // $display("ebreak, inst=%x, pc=%x", inst, pc);
                             // $finish;
 						end

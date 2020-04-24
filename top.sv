@@ -154,28 +154,40 @@ module top
 
     logic [63:0] IF_pc;
     logic [31:0] IF_inst;
-    logic IF_inst_valid; //if cache output is valid
+    logic IF_fetch_valid; //if cache output is valid
 
     logic IF_disable; // IF should sit quiet if we're waiting for traps to drain
     assign IF_disable = trap_in_pipeline; //Make sure we disable both input and output
 
     logic IF_stall;
-    assign IF_stall = !IF_inst_valid;
+    assign IF_stall = !IF_fetch_valid; //note: fetch_valid might be a page fault
 
-    // Note: we have if_wr_en to update IF_pc, but that doesn't mean we're
-    // executing the instruction currently in IF. That only happens when the
-    // instruction currently in IF goes into the pipeline, which happens
-    // when ID reg is taking in a fresh instruction
+    // IF_is_executing is high only when the op in IF is passing into ID
     logic IF_is_executing;
     assign IF_is_executing = id_wr_en && !id_gen_bubble;
 
 
-    logic        IF_gen_trap = 0; //TODO: trap gen
-    logic [63:0] IF_gen_trap_cause = 0;
-    logic [63:0] IF_gen_trap_val   = 0;
+    logic        IF_gen_trap; //TODO: trap gen
+    logic [63:0] IF_gen_trap_cause;
+    logic [63:0] IF_gen_trap_val;
 
+    // ==== send I$ requests into memory system
+    logic [63:0] mem_sys_ic_req_addr; //cant assign directly to input of module, so do this instead
+    logic mem_sys_ic_en;
 
-    // IF-stage PC logic
+    assign mem_sys_ic_req_addr = IF_pc;
+    assign mem_sys_ic_en = !IF_disable; 
+
+    // Get response from I$
+    assign IF_fetch_valid = (mem_sys.ic_resp_valid);
+    assign IF_inst =       (mem_sys.ic_resp_inst);
+
+    // On page fault, send a trap instruction forward
+    assign IF_gen_trap = mem_sys.ic_resp_page_fault;
+    assign IF_gen_trap_cause = IF_gen_trap ? MCAUSE_PAGEFAULT_I : 0;
+    assign IF_gen_trap_val   = IF_gen_trap ? IF_pc : 0; //on fault, mtval gets virtual address of op
+
+    // ====  IF-stage next-PC logic
     always_ff @ (posedge clk) begin
         if (reset) begin
             $display("Entry: %x", entry);
@@ -232,13 +244,6 @@ module top
         end
     end
 
-    // ==== send I$ requests into memory system
-    logic [63:0] mem_sys_ic_req_addr; //cant assign directly to input of module, so do this instead
-    logic mem_sys_ic_en;
-    assign mem_sys_ic_req_addr = (IF_pc);
-    assign mem_sys_ic_en = !IF_disable; 
-    assign IF_inst_valid = (mem_sys.ic_resp_valid);
-    assign IF_inst =       (mem_sys.ic_resp_inst);
 
     // ------------------------END IF STAGE----------------------------
 
@@ -248,7 +253,7 @@ module top
 
         //traffic signals
         .wr_en(id_wr_en),
-        .gen_bubble(id_gen_bubble || IF_disable),
+        .gen_bubble(id_gen_bubble),
         .valid(),
 
         // incoming signals for next step's ID
@@ -632,7 +637,7 @@ module top
 
     always_comb begin
         if (WB_reg.valid && !ecall_stall && WB_reg.curr_do_jump) begin
-            $display("tick %x: jump to %x, from %x", dbg_tick_counter, WB_reg.curr_jump_target, WB_reg.curr_pc);
+            //$display("tick %x: jump to %x, from %x", dbg_tick_counter, WB_reg.curr_jump_target, WB_reg.curr_pc);
         end
     end
 
@@ -681,8 +686,9 @@ module top
     logic flush_before_mem;
     logic flush_before_wb;
     
-    logic trap_in_pipeline;
-    assign trap_in_pipeline = (IF_is_trap || ID_is_trap || EX_is_trap || MEM_is_trap || WB_is_trap);
+    logic trap_in_pipeline; // IF isn't a pipeline stage, so don't check there
+    // Or else IF will disable itself in the same cycle that it detects a thing
+    assign trap_in_pipeline = (ID_is_trap || EX_is_trap || MEM_is_trap || WB_is_trap);
 
     assign flush_before_id  = ID_is_trap  || 0;
     assign flush_before_ex  = EX_is_trap  || EX_do_jump;
@@ -740,12 +746,15 @@ module top
         .clk,
         .reset,
 
-        .satp(priv_sys.satp_csr),
+        .csr_SATP(priv_sys.satp_csr),
+        .csr_SUM(0), //TODO: wirte this into priv_sys
 
         //I$ ports
         .ic_req_addr(mem_sys_ic_req_addr),  // this is assigned from a signal since it's an input
-        .ic_en(1), // TODO: will we ever need to disable the I$?
-        .ic_resp_inst(), .ic_resp_valid(),  // these can be read as mem_sys.xxx, since theyre outputs
+        .ic_en(1), // TODO: wire this to IF_disable
+        .ic_resp_valid(),    //Outputs
+        .ic_resp_page_fault(),
+        .ic_resp_inst(),
 
         //D$ ports
         .dc_en      (mem_stage.dc_en), 

@@ -66,7 +66,8 @@ module MEM_Stage
                             (inst.is_atomic && atomic_stall)
                         );
 
-    assign force_pipeline_flush = inst.is_sfence_vma; // TODO: need to empty out TLBs
+    assign force_pipeline_flush = !is_bubble && !op_trapped && inst.is_sfence_vma;
+    //TODO: also tell TLBs to flush
 
 
     always_comb begin

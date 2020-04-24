@@ -19,14 +19,17 @@ module MemorySystem
     input reset,
     
     //=== Special inputs
-    input  logic [63:0] satp, //current value of SATP CSR
     input  logic [1:0]  curr_priv_mode, //M/S/U //TODO
+    input  logic [63:0] csr_SATP,   //current value of SATP CSR
+    input  logic        csr_SUM,    //TODO: determines if S mode can load/store U-mode virtual pages
 
     //=== External I$ interface
     input  logic        ic_en,
     input  logic [63:0] ic_req_addr,
+
+    output logic        ic_resp_valid,     // when resp_valid, it's either a page fault or a valid inst
+    output logic        ic_resp_page_fault, // if page_fault == 1, ignore resp_inst
     output logic [31:0] ic_resp_inst,
-    output logic        ic_resp_valid,
 
     //=== External D$ interface
     input  logic        dc_en,
@@ -92,9 +95,9 @@ module MemorySystem
 
     // === SATP decode
     logic [3:0] satp_mode;
-    logic [15:0] satp_asid;
+    logic [15:0] satp_asid; //TODO: check ASID
     logic [43:0] satp_ppn;
-    assign {satp_mode, satp_asid, satp_ppn} = satp;
+    assign {satp_mode, satp_asid, satp_ppn} = csr_SATP;
 
     logic virtual_en;
     logic [63:0] root_pt_addr;
@@ -102,12 +105,16 @@ module MemorySystem
     // === Decode mode into virtual/physical/error
     always_comb begin
         virtual_en = 0;
-        case (satp_mode) inside
-            0: ; //physical mode
-            8: $error("SATP set to mode 8, 'Sv39', not supported");
-            9: virtual_en = 1; //Sv48
-            default: $error("SATP set to unsupported mode %d\n", satp_mode);
-        endcase
+
+        // SATP csr only applies in S and U modes
+        if (curr_priv_mode != PRIV_M) begin
+            case (satp_mode) inside
+                0: ; //physical mode
+                8: $error("SATP set to mode 8, 'Sv39', not supported");
+                9: virtual_en = 1; //Sv48
+                default: $error("SATP set to unsupported mode %d\n", satp_mode);
+            endcase
+        end
     end
 
     // === get pt address
@@ -167,7 +174,6 @@ module MemorySystem
     assign dc_out_write_done  = mmu.use_dcache ? 0 : dcache.write_done; 
 
 
-
     // Switch DCache to physical mode when MMU is using it
     logic dcmux_virtual_en;
     assign dcmux_virtual_en = virtual_en && !mmu.use_dcache;
@@ -197,18 +203,50 @@ module MemorySystem
 
 
     // =================== Icache is fairly straightforward
+    
+    // I$ permissions checking
+    always_comb begin
+        ic_resp_page_fault = 0;
+
+        // If we're in virtual mode and succesfully found a mapping, check the perms
+        if ( virtual_en && itlb.pa_valid ) begin
+            if ( itlb.pte_perm[0] == 0) begin // V: must be valid
+                ic_resp_page_fault = 1;
+
+            end else if ( itlb.pte_perm[3] == 0) begin // X: must be executable
+                ic_resp_page_fault = 1;
+
+            end else if ( itlb.pte_perm[4] == 0 && curr_priv_mode == PRIV_U) begin // U: 
+                ic_resp_page_fault = 1; //!U pages can't be execced by user
+
+            end else if ( itlb.pte_perm[4] == 1 && curr_priv_mode != PRIV_U) begin // U:
+                ic_resp_page_fault = 1; //U pages can't by execced by S
+
+            end else if ( itlb.pte_perm[6] == 0) begin // A: fault so software can set accessed bit
+                ic_resp_page_fault = 1;
+            end
+        end
+    end
+
+
+    // Give output to user if we get a response from I$ or if TLB identifies a page fault
+    // on page fault, zero out resulting instruction for ease of debugging
+    assign ic_resp_valid = icache.icache_valid || ic_resp_page_fault;
+    assign ic_resp_inst = ic_resp_page_fault ? 0 : icache.out_inst; 
+    
+    // If we encounter a page fault, I$ will sit and wait
     Icache icache (
             .clk, 
             .reset,
         
             .in_fetch_addr  (ic_req_addr),  //In
             .icache_enable  (ic_en),
-            .out_inst       (ic_resp_inst), //Out
-            .icache_valid   (ic_resp_valid),
+            .out_inst       (), //Out
+            .icache_valid   (),
 
             .virtual_mode   (virtual_en),           // virtual-mode enable
             .translated_addr       (itlb.pa),       //translation from I-TLB
-            .translated_addr_valid (itlb.pa_valid), 
+            .translated_addr_valid (itlb.pa_valid && !ic_resp_page_fault), 
 
             .*  //this links all the icache_m_axi ports
     );
@@ -220,7 +258,7 @@ module MemorySystem
     logic dtlb_req_valid; 
     logic itlb_req_valid;
     assign dtlb_req_valid = virtual_en && dc_en;
-    assign itlb_req_valid = virtual_en; // TODO: once we have I$_en, add that in
+    assign itlb_req_valid = virtual_en && ic_en;
 
     
     Dtlb dtlb(
@@ -249,7 +287,7 @@ module MemorySystem
        .va      (ic_req_addr),
        .pa_valid(),               // Out to D$
        .pa(),
-       .pte_perm(/*TODO*/),
+       .pte_perm(),
         
 
        // MMU Connection
@@ -263,9 +301,8 @@ module MemorySystem
 
 
     // =================== MMU
-
-    //TODO: once we have a tlb, the tlbs will pass on misses to MMU
-    //for now, just send all TLB directly requests to MMU
+    // TLBs request translations from MMU on miss
+    
     MMU mmu (
         .clk,
         .reset,
@@ -295,7 +332,7 @@ module MemorySystem
 
 
     // this grabs all the m_axi, icache_m_axi, and dcache_m_axi ports
-    // and wire them together
+    // and wires them together
     AXI_interconnect axi_interconnect (.*);
 
     // === ICACHE-AXI port
