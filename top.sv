@@ -9,6 +9,9 @@
 `include "mem_stage.sv"
 `include "privilege.sv"
 
+
+`define CPU_DEBUG_PRINT_JUMPS  //Enables jump-logging output
+
 module top
 #(
   ID_WIDTH = 13,
@@ -639,6 +642,7 @@ module top
 	);
 
 
+`ifdef CPU_DEBUG_PRINT_JUMPS
     // ========= DEBUG OUTPUT ON JUMPS
     always_ff @(posedge clk) begin
         if (WB_reg.valid && (!(wb_stage.stall)) && WB_reg.curr_do_jump) begin
@@ -672,6 +676,7 @@ module top
 
         end
     end
+`endif
 
 
     // ------------------------END WB STAGE-----------------------------

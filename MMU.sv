@@ -169,6 +169,8 @@ module MMU
                     // wait until we get some data back
                     if (dcache_resp_valid) begin
 
+                        //TODO: check that bits 48-63 all the same, else page fault
+
                         // === Check if invalid entry (i.e. page fault)
                         if (!dcache_resp_v || (dcache_resp_w && !dcache_resp_r)) begin
                             //check pte valid bit, check valid values of W and R
