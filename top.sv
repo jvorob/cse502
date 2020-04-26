@@ -73,6 +73,12 @@ module top
 	// executing before we stop. This is because there might still be instructions in the
 	// pipeline partially executed after hitting the end of the program with IF_pc.
     logic [2:0] dbg_termination_counter;
+
+    // Use these to silence tight loops: show a ... for doing the same jump repeatedly
+    // Stores from/to of last retired jump
+    logic [63:0] dbg_jump_from = 0;
+    logic [63:0] dbg_jump_to = 0;
+    logic [31:0] dbg_jump_repeat = 0;
     
     logic [63:0] dbg_tick_counter; //counts once per clock cycle
     always_ff @ (posedge clk) begin
@@ -605,8 +611,6 @@ module top
 
     // ------------------------BEGIN WB STAGE---------------------------
 
-	logic ecall_stall;
-
 	wb_stage wb_stage(
 		.clk(clk),
 		.reset(reset),
@@ -635,15 +639,45 @@ module top
 	);
 
 
-    always_comb begin
-        if (dbg_tick_counter % 1000 == 0 && WB_reg.valid && !ecall_stall && WB_reg.curr_do_jump) begin
-            //$display("tick %x: jump to %x, from %x", dbg_tick_counter, WB_reg.curr_jump_target, WB_reg.curr_pc);
+    // ========= DEBUG OUTPUT ON JUMPS
+    always_ff @(posedge clk) begin
+        if (WB_reg.valid && (!(wb_stage.stall)) && WB_reg.curr_do_jump) begin
+
+            //if we're doing the same jump again
+            if(WB_reg.curr_pc == dbg_jump_from && WB_reg.curr_jump_target == dbg_jump_to) begin
+
+                //Print on the second iteration of a loop
+                // Or once every 10k instructions
+                if(dbg_jump_repeat == 1)
+                    $display("tick %x: looping %x ...", dbg_tick_counter, dbg_jump_to);
+                else if(dbg_jump_repeat % 3000 == 0)
+                    $display("tick %x: looping %x ... (%dk iterations)", dbg_tick_counter, 
+                                                              dbg_jump_to, dbg_jump_repeat/1000);
+                dbg_jump_repeat <= dbg_jump_repeat + 1;
+
+
+            //this is a different jump from previous
+            end else begin
+
+                if(dbg_jump_repeat > 1) begin //just got out of a tight loop
+                    $display("tick %x: ... looped %d times", dbg_tick_counter, dbg_jump_repeat);
+                end
+
+                $display("tick %x: jump to %x, from %x", dbg_tick_counter, 
+                                    WB_reg.curr_jump_target, WB_reg.curr_pc);
+                dbg_jump_from <= WB_reg.curr_pc;
+                dbg_jump_to <= WB_reg.curr_jump_target;
+                dbg_jump_repeat <= 1;
+            end
+
         end
     end
+
 
     // ------------------------END WB STAGE-----------------------------
     
     // -------Modules outside of pipeline (e.g. hazard detection)-------
+    
     
     hazard_unit haz(
         .ID_deco(ID_deco),
