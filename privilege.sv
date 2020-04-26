@@ -43,7 +43,10 @@ module Privilege_System
     output [1:0] curr_priv_mode
 );
     logic [1:0] current_mode;   // Current privilege mode
-    logic [REG_WIDTH-1:0] csrs [0:CSR_COUNT-1]; // The CSR registers
+    //logic [REG_WIDTH-1:0] csrs [0:CSR_COUNT-1]; // The CSR registers
+    logic [0:CSR_COUNT-1][REG_WIDTH-1:0] csrs;
+
+    logic [1:0] trap_privilege_mode;
 
     logic [1:0] csr_rw_perm;
     logic [1:0] lowest_priv;
@@ -62,11 +65,26 @@ module Privilege_System
 
     always_ff @(posedge clk) begin
         if (reset) begin
-            csrs <= '{default:0};
+            integer i;
+            for (i = 0; i < 4096; i++)
+                csrs[i] <= 0;
+            // csrs <= '{default:0};
+
+            csrs[CSR_MISA][REG_WIDTH-1:REG_WIDTH-2] <= 2'b10; // Our ISA is 64-bit
+            csrs[CSR_MISA][18] <= 1; // Supervisor mode implemented
+            csrs[CSR_MISA][12] <= 1; // Integer mult/div extension
+            csrs[CSR_MISA][8] <= 1; // RV64I base ISA
+            csrs[CSR_MISA][0] <= 1; // Atomic extension
+
+
             current_mode <= PRIV_M;
         end
         else if (valid && is_csr) begin
-            if (csr_rw) begin
+            
+            if (addr == CSR_MISA) begin
+                // do nothing
+            end
+            else if (csr_rw) begin
                 csrs[addr] <= val;
             end
             else if (csr_rs) begin
@@ -75,20 +93,34 @@ module Privilege_System
             else begin // This is the condition for csr_rc.
                 csrs[addr] <= csrs[addr] & (~val);
             end
+        
+            csrs[CSR_MSTATUS][4] <= 0; // UPIE hardwired to 0
+            csrs[CSR_MSTATUS][0] <= 0; // UIE hardwired to 0
         end
 
         if (trap_en) begin
-            csrs[CSR_MEPC] <= trap_pc;
-            csrs[CSR_MSTATUS][12:11] <= current_mode; // set mstatus.(mpp=12:11) to privilege mode before interrupt
-            csrs[CSR_MSTATUS][7] <= csrs[CSR_MSTATUS][3]; // set mstatus.(mpie=7) to mstatus.(mie=3)
-            csrs[CSR_MSTATUS][3] <= 0; // set mstatus.(mie=3) = 0
-            
-
-            csrs[CSR_MCAUSE] <= trap_cause;
-            csrs[CSR_MTVAL] <= trap_mtval;
+            if (trap_privilege_mode == PRIV_S) begin
+                csrs[CSR_SEPC] <= trap_pc;
+                csrs[CSR_SSTATUS][8] <= 1; // set sstatus.(spp=8) to 0 if trap originated from user mode, 1 otherwise.
+                csrs[CSR_SSTATUS][5] <= csrs[CSR_SSTATUS][1]; // set sstatus.(spie=5) to sstatus.(sie=1)
+                csrs[CSR_SSTATUS][1] <= 0; // set sstatus.(sie=1) = 0
+                
+                csrs[CSR_SCAUSE] <= trap_cause;
+                csrs[CSR_STVAL] <= trap_mtval;
+            end
+            else if (trap_privilege_mode == PRIV_M) begin
+                csrs[CSR_MEPC] <= trap_pc;
+                csrs[CSR_MSTATUS][12:11] <= current_mode; // set mstatus.(mpp=12:11) to privilege mode before interrupt
+                csrs[CSR_MSTATUS][7] <= csrs[CSR_MSTATUS][3]; // set mstatus.(mpie=7) to mstatus.(mie=3)
+                csrs[CSR_MSTATUS][3] <= 0; // set mstatus.(mie=3) = 0
+                
+                csrs[CSR_MCAUSE] <= trap_cause;
+                csrs[CSR_MTVAL] <= trap_mtval;
+            end
 
             // New privilege mode is M by default on trap (check medeleg and mideleg to delegate)
-            current_mode <= PRIV_M;
+            //current_mode <= PRIV_M;
+            current_mode <= trap_privilege_mode;
         end
         
         if (trap_is_ret) begin
@@ -101,40 +133,68 @@ module Privilege_System
             end
             else if (trap_ret_from_priv == PRIV_S) begin
                 // must write sepc to pc register.
-                csrs[CSR_SSTATUS][3] <= csrs[CSR_SSTATUS][7]; // set sstatus.(sie=3) to sstatus.(spie=7)
-                csrs[CSR_SSTATUS][7] <= 1; // set sstatus.(spie=7) to 1
-                current_mode <= csrs[CSR_SSTATUS][12:11]; // output previous privilege (sstatus.(spp=12:11))
-                csrs[CSR_SSTATUS][12:11] <= PRIV_M; // Set sstatus.(spp=12:11) to U (or M if user-mode not supported)
+                csrs[CSR_SSTATUS][1] <= csrs[CSR_SSTATUS][5]; // set sstatus.(sie=1) to sstatus.(spie=5)
+                csrs[CSR_SSTATUS][5] <= 1; // set sstatus.(spie=5) to 1
+                
+                if (csrs[CSR_SSTATUS][8] == 1) // output previous privilege (sstatus.(spp=8))
+                    current_mode <= PRIV_S;
+                else
+                    current_mode <= PRIV_U;
+                
+                csrs[CSR_SSTATUS][8] <= 0; // Set sstatus.(spp=8) 0
             end
             else if (trap_ret_from_priv == PRIV_U) begin
-                // must write uepc to pc register.
-                csrs[CSR_USTATUS][3] <= csrs[CSR_USTATUS][7]; // set ustatus.(uie=3) to ustatus.(upie=7)
-                csrs[CSR_USTATUS][7] <= 1; // set ustatus.(upie=7) to 1
-                current_mode <= csrs[CSR_USTATUS][12:11]; // output previous privilege (ustatus.(upp=12:11))
-                csrs[CSR_USTATUS][12:11] <= PRIV_M; // Set ustatus.(upp=12:11) to U (or M if user-mode not supported)
+                $display("Error, we do not support user mode so we shouldn't have uret.");
             end
         end
     end
 
+    logic trap_code;
+    assign trap_code = trap_cause[5:0];
+
     always_comb begin
-        if (trap_en)
+        trap_privilege_mode = PRIV_M;
+
+        if (trap_en) begin
             jump_trap_handler = 1;
+            
+            if (csrs[CSR_MEDELEG][trap_code] == 1 || csrs[CSR_MIDELEG][trap_code] == 1)
+                trap_privilege_mode = PRIV_S;
+            else
+                trap_privilege_mode = PRIV_M;
+        end
         else
             jump_trap_handler = 0;
 
-
-        if (csrs[CSR_MTVEC][1:0] == 0) begin        // Direct
-            handler_addr = { csrs[CSR_MTVEC][63:2], 2'b00 };
-        end
-        else if (csrs[CSR_MTVEC][1:0] == 1) begin   // Vectored
-            if (is_interrupt == 0)
+        if (trap_privilege_mode == PRIV_M) begin
+            if (csrs[CSR_MTVEC][1:0] == 0) begin        // Direct
                 handler_addr = { csrs[CSR_MTVEC][63:2], 2'b00 };
-            else
-                handler_addr = { csrs[CSR_MTVEC][63:2], 2'b00 } + ( { 1'b0, csrs[CSR_MCAUSE][62:0] } << 2);
+            end
+            else if (csrs[CSR_MTVEC][1:0] == 1) begin   // Vectored
+                if (is_interrupt == 0)
+                    handler_addr = { csrs[CSR_MTVEC][63:2], 2'b00 };
+                else
+                    handler_addr = { csrs[CSR_MTVEC][63:2], 2'b00 } + ( { 1'b0, csrs[CSR_MCAUSE][62:0] } << 2);
+            end
+            else begin
+                $display("CSR MTVEC mode is an invalid value: 0x%x", csrs[CSR_MTVEC][1:0]);
+            end
         end
-        else begin
-            $display("CSR MTVEC mode is an invalid value: 0x%x", csrs[CSR_MTVEC][1:0]);
+        else if (trap_privilege_mode == PRIV_S) begin
+            if (csrs[CSR_STVEC][1:0] == 0) begin        // Direct
+                handler_addr = { csrs[CSR_STVEC][63:2], 2'b00 };
+            end
+            else if (csrs[CSR_STVEC][1:0] == 1) begin   // Vectored
+                if (is_interrupt == 0)
+                    handler_addr = { csrs[CSR_STVEC][63:2], 2'b00 };
+                else
+                    handler_addr = { csrs[CSR_STVEC][63:2], 2'b00 } + ( { 1'b0, csrs[CSR_SCAUSE][62:0] } << 2);
+            end
+            else begin
+                $display("CSR STVEC mode is an invalid value: 0x%x", csrs[CSR_STVEC][1:0]);
+            end
         end
+        else $display("Trying to execute trap handler in an invalid privilege mode: %x", trap_privilege_mode);
     end
 
     always_comb begin

@@ -359,7 +359,7 @@ module Decoder
                             // WFI
                             // spec allows WFI to be a noop
                             out.is_wfi = 1; //TODO: we should be able to get rid of all this logic
-                            $display("wfi, inst=%x, pc=%x", inst, pc);
+                            // $display("wfi, inst=%x, pc=%x", inst, pc);
                         end
                         else if (funct7 == 7'b000_1001) begin
                             // TODO: needs to invalidate TLB

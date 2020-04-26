@@ -636,7 +636,7 @@ module top
 
 
     always_comb begin
-        if (WB_reg.valid && !ecall_stall && WB_reg.curr_do_jump) begin
+        if (dbg_tick_counter % 1000 == 0 && WB_reg.valid && !ecall_stall && WB_reg.curr_do_jump) begin
             //$display("tick %x: jump to %x, from %x", dbg_tick_counter, WB_reg.curr_jump_target, WB_reg.curr_pc);
         end
     end
@@ -782,7 +782,7 @@ module top
 
         else if (IF_is_executing && IF_inst == 0) begin // Count advances for each null inst
             dbg_termination_counter <= dbg_termination_counter + 1;
-
+/*
             if (dbg_termination_counter == 5) begin
                 $display("===== Program terminated =====");
                 $display("    IF_pc = 0x%0x", IF_pc);
@@ -790,7 +790,7 @@ module top
                     $display("    r%2.2d: %10d (0x%x)", i, rf.regs[i], rf.regs[i]);
                 $finish;
             end
-
+*/
         end
     end
 
