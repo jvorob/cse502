@@ -19,6 +19,7 @@ module top
 (
   input  clk,
          reset,
+         hz32768timer,
 
   // 64-bit addresses of the program entry point and initial stack pointer
   input  [63:0] entry,

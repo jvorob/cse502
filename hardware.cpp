@@ -4,6 +4,16 @@
 
 using namespace std;
 
+static uint64_t ticks_to_timer = 0;
+void rtc_tick(Vtop* top) {
+    if (ticks_to_timer == 1) top->hz32768timer = 1;
+    else if (ticks_to_timer == 0) {
+        top->hz32768timer = 1;
+        ticks_to_timer = 1000000000000ULL/32768/System::sys->ps_per_clock;
+    }
+    --ticks_to_timer;
+}
+
 void write_one(const Device* self, Vtop* top) {
     System::sys->w_addr = top->m_axi_awaddr;
     System::sys->w_count = 1;
@@ -36,7 +46,7 @@ void uart_lite_read(const Device* self, Vtop* top) {
 
 void uart_lite_write_data(const Device* self, Vtop* top) {
     int offset = (System::sys->w_addr - self->start)/4;
-    if (top->m_axi_wstrb != 0x0F) {
+    if (top->m_axi_wstrb != 0x0F)  {
         cerr << "Write request with unsupported strobe value (" << std::hex << (int)(top->m_axi_wstrb) << ")" << endl;
         Verilated::gotFinish(true);
     }
@@ -55,8 +65,8 @@ void uart_lite_write_data(const Device* self, Vtop* top) {
 }
 
 const struct Device devices[] = {
-    { 0x70AEEF00ULL, 0x000c0000, clint_read, write_one, clint_write_data },
-    { 0x70BEEF00ULL, 0x00010000, uart_lite_read, write_one, uart_lite_write_data }
+    { 0x70aeef00ULL, 0x000c0000, clint_read, write_one, clint_write_data },
+    { 0x70beef00ULL, 0x00010000, uart_lite_read, write_one, uart_lite_write_data }
 };
 
 const Device* full_system_hardware_match(const uint64_t addr) {
