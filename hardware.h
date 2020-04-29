@@ -3,6 +3,8 @@
 
 #include "Vtop.h"
 
+void rtc_tick(Vtop* top);
+
 struct Device {
   uint64_t start, size;
   void (*read)(const Device* self, Vtop* top);

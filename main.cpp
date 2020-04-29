@@ -32,7 +32,7 @@ int main(int argc, char* argv[]) {
 	if (argc > 0) binaryfn = argv[1];
 
 	Vtop top;
-	System sys(&top, RAM_SIZE, binaryfn, argc-1, argv+1, 500);
+	System sys(&top, RAM_SIZE, binaryfn, argc-1, argv+1, 500/*ps_per_clock*/);
 
   if (!sys.full_system) {
     // (argc, argv) sanity check
