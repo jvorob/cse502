@@ -109,9 +109,12 @@ module MemorySystem
         // SATP csr only applies in S and U modes
         if (curr_priv_mode != PRIV_M) begin
             case (satp_mode) inside
+                // NOTE: currently we just error out on the wrong mode
+                // we can change the mode between 39/48 by just changing MMU.LEVELS param
+                // (but don't know if we can do that at runtime safely)
                 0: ; //physical mode
-                8: $error("SATP set to mode 8, 'Sv39', not supported");
-                9: virtual_en = 1; //Sv48
+                8: virtual_en = 1;
+                9: $error("SATP set to mode 9, 'Sv48', not supported"); // virtual_en = 1; //Sv48
                 default: $error("SATP set to unsupported mode %d\n", satp_mode);
             endcase
         end

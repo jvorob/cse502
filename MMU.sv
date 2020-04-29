@@ -24,7 +24,9 @@ typedef enum bit[1:0] {
 
 module MMU 
 #( // Constant params
-
+    //(we're not currently implementing the ability to switch between these on the fly)
+    //LEVELS = 4 //max-levels for sv48 
+     LEVELS = 3 //max-lelves for sv39
 )
 ( // IO
     input clk,
@@ -58,7 +60,6 @@ module MMU
     // ====== MISC
     input  logic [63:0]          root_pt_addr // Currently set by havetlb hack, later will be from csr
 );
-    localparam LEVELS = 4; //defalt for sv48
 
     MMU_State state;
 
@@ -159,7 +160,7 @@ module MMU
                         translate_root_pt <= root_pt_addr;
 
                         // == Initialize fetch to root of page table
-                        curr_level <= LEVELS-1;
+                        curr_level <= LEVELS-1; //this changes based on sv39/sv48
                         curr_pt_addr <= root_pt_addr;
 
                     end
