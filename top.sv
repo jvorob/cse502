@@ -1,3 +1,5 @@
+`default_nettype none //NEVER INFER NETS TO JUST EXIST
+
 `include "Sysbus.defs"
 `include "enums.sv"
 `include "decoder.sv"
@@ -152,6 +154,7 @@ module top
     logic wb_gen_bubble;
 
     // wr_en
+    logic if_wr_en;
     logic id_wr_en;
     logic ex_wr_en;
     logic mem_wr_en;
@@ -599,7 +602,7 @@ module top
         .next_mem_result(mem_stage_result),
 
         // Data signals for current WB step
-        .curr_pc(trap_pc),
+        .curr_pc(), //goes out to priv_sys
         .curr_deco(),
         .curr_alu_result(),
         .curr_mem_result(),

@@ -35,7 +35,7 @@ module hazard_unit(
 
     // EX signals
     logic [4:0] ex_rd;
-    logic id_en_rd;
+    logic ex_en_rd;
 
     assign ex_rd = EX_deco.rd;
     assign ex_en_rd = EX_deco.en_rd;
