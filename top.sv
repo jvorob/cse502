@@ -11,6 +11,7 @@
 
 
 `define CPU_DEBUG_PRINT_JUMPS  //Enables jump-logging output
+`define CPU_MAX_CYCLES_TO_RUN  'h610000  //shuts down the cpu after this many clocks
 
 module top
 #(
@@ -647,41 +648,6 @@ module top
 	);
 
 
-`ifdef CPU_DEBUG_PRINT_JUMPS
-    // ========= DEBUG OUTPUT ON JUMPS
-    always_ff @(posedge clk) begin
-        if (WB_reg.valid && (!(wb_stage.stall)) && WB_reg.curr_do_jump) begin
-
-            //if we're doing the same jump again
-            if(WB_reg.curr_pc == dbg_jump_from && WB_reg.curr_jump_target == dbg_jump_to) begin
-
-                //Print on the second iteration of a loop
-                // Or once every 10k instructions
-                if(dbg_jump_repeat == 1)
-                    $display("tick %x: looping %x ...", dbg_tick_counter, dbg_jump_to);
-                else if(dbg_jump_repeat % 3000 == 0)
-                    $display("tick %x: looping %x ... (%dk iterations)", dbg_tick_counter, 
-                                                              dbg_jump_to, dbg_jump_repeat/1000);
-                dbg_jump_repeat <= dbg_jump_repeat + 1;
-
-
-            //this is a different jump from previous
-            end else begin
-
-                if(dbg_jump_repeat > 1) begin //just got out of a tight loop
-                    $display("tick %x: ... looped %d times", dbg_tick_counter, dbg_jump_repeat);
-                end
-
-                $display("tick %x: jump to %x, from %x", dbg_tick_counter, 
-                                    WB_reg.curr_jump_target, WB_reg.curr_pc);
-                dbg_jump_from <= WB_reg.curr_pc;
-                dbg_jump_to <= WB_reg.curr_jump_target;
-                dbg_jump_repeat <= 1;
-            end
-
-        end
-    end
-`endif
 
 
     // ------------------------END WB STAGE-----------------------------
@@ -840,6 +806,54 @@ module top
 */
         end
     end
+
+
+    // ==== Max cycles termination logic
+`ifdef CPU_MAX_CYCLES_TO_RUN
+    always_ff @(posedge clk) begin
+        if(dbg_tick_counter >  `CPU_MAX_CYCLES_TO_RUN ) begin
+            $display("TERMINATING CPU: ran for 0x%x cycles\n", dbg_tick_counter);
+            $display("To keep running, change CPU_MAX_CYCLES_TO_RUN in top.sv\n");
+            $error("Terminating");
+        end
+    end
+`endif
+
+`ifdef CPU_DEBUG_PRINT_JUMPS
+    // ========= DEBUG OUTPUT ON JUMPS
+    always_ff @(posedge clk) begin
+        if (WB_reg.valid && (!(wb_stage.stall)) && WB_reg.curr_do_jump) begin
+
+            //if we're doing the same jump again
+            if(WB_reg.curr_pc == dbg_jump_from && WB_reg.curr_jump_target == dbg_jump_to) begin
+
+                //Print on the second iteration of a loop
+                // Or once every 10k instructions
+                if(dbg_jump_repeat == 1)
+                    $display("tick %x: looping %x ...", dbg_tick_counter, dbg_jump_to);
+                else if(dbg_jump_repeat % 3000 == 0)
+                    $display("tick %x: looping %x ... (%dk iterations)", dbg_tick_counter, 
+                                                              dbg_jump_to, dbg_jump_repeat/1000);
+                dbg_jump_repeat <= dbg_jump_repeat + 1;
+
+
+            //this is a different jump from previous
+            end else begin
+
+                if(dbg_jump_repeat > 1) begin //just got out of a tight loop
+                    $display("tick %x: ... looped %d times", dbg_tick_counter, dbg_jump_repeat);
+                end
+
+                $display("tick %x: jump to %x, from %x", dbg_tick_counter, 
+                                    WB_reg.curr_jump_target, WB_reg.curr_pc);
+                dbg_jump_from <= WB_reg.curr_pc;
+                dbg_jump_to <= WB_reg.curr_jump_target;
+                dbg_jump_repeat <= 1;
+            end
+
+        end
+    end
+`endif
 
     initial begin
             $display("Initializing top, entry point = 0x%x", entry);
