@@ -23,6 +23,9 @@ module MEM_Stage
 
     output force_pipeline_flush, // requests pipeline to be flushed behind MEM stage
 
+    output tlb_invalidate, // requests TLB entries to be flushed
+    //TODO: make this more granular
+
 
     //=== Trap inputs/outputs
     input op_trapped,
@@ -66,8 +69,9 @@ module MEM_Stage
                             (inst.is_atomic && atomic_stall)
                         );
 
+    //Sfence should clear TLBs, clear the pipeline
     assign force_pipeline_flush = !is_bubble && !op_trapped && inst.is_sfence_vma;
-    //TODO: also tell TLBs to flush
+    assign tlb_invalidate =       !is_bubble && !op_trapped && inst.is_sfence_vma;
 
 
     always_comb begin

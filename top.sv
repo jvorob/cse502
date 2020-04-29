@@ -544,6 +544,8 @@ module top
         .clk,
         .reset,
 
+
+
         //inputs
         .inst(MEM_reg.curr_deco),
         .ex_data(MEM_reg.curr_data),
@@ -563,7 +565,9 @@ module top
         .mem_ex_rdata(mem_ex_rdata),
         .atomic_result,
 
+        //Special outputs
         .force_pipeline_flush(),
+        .tlb_invalidate(), //goes to mem_sys
 
         // === D$ interface (passed to MemorySystem)
         .dc_en            (),  // input ports get read in at MemorySystem instantiation
@@ -789,9 +793,12 @@ module top
         .csr_SATP(priv_sys.satp_csr),
         .csr_SUM(0), //TODO: wirte this into priv_sys
 
+        // TLB flushes on SATP write or sfence
+        .tlb_invalidate(mem_stage.tlb_invalidate || priv_sys.modifying_satp),
+
         //I$ ports
         .ic_req_addr(mem_sys_ic_req_addr),  // this is assigned from a signal since it's an input
-        .ic_en(1), // TODO: wire this to IF_disable
+        .ic_en(!IF_disable), // TODO: wire this to IF_disable
         .ic_resp_valid(),    //Outputs
         .ic_resp_page_fault(),
         .ic_resp_inst(),

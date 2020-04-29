@@ -23,6 +23,10 @@ module MemorySystem
     input  logic [63:0] csr_SATP,   //current value of SATP CSR
     input  logic        csr_SUM,    //TODO: determines if S mode can load/store U-mode virtual pages
 
+
+    input  logic        tlb_invalidate, //Used by SFENCE.VMA: flushes all TLB entries
+    //TODO: allow more fine-grained invalidation
+
     //=== External I$ interface
     input  logic        ic_en,
     input  logic [63:0] ic_req_addr,
@@ -267,6 +271,8 @@ module MemorySystem
     Dtlb dtlb(
        .clk,
        .reset,
+
+       .tlb_invalidate(tlb_invalidate),
        
        .va_valid(dtlb_req_valid), //Input
        .va      (dc_in_addr),
@@ -285,6 +291,8 @@ module MemorySystem
     Itlb itlb(
        .clk,
        .reset,
+
+       .tlb_invalidate(tlb_invalidate),
        
        .va_valid(itlb_req_valid), // Input
        .va      (ic_req_addr),

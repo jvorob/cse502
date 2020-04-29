@@ -17,6 +17,9 @@ module Dtlb
     input clk,
     input reset,
 
+    input tlb_invalidate, // Used by SFENCE, dumps all TLB entries
+    // (TODO: make a more granular version)
+
     // The virtual address to be translated
     input va_valid,
     input [EXTENDED_VPN-1:0] va,
@@ -72,7 +75,7 @@ module Dtlb
     assign pte_perm = perms[index][0];
 
     always_ff @(posedge clk) begin
-        if (reset) begin
+        if (reset || tlb_invalidate) begin
             valid_entry <= '{default:0};
             tlb_vas <= '{default:0};
             tlb_pas <= '{default:0};
@@ -130,6 +133,8 @@ module Itlb
 (
     input clk,
     input reset,
+
+    input tlb_invalidate,
 
     // The virtual address to be translated
     input va_valid,
