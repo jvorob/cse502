@@ -61,12 +61,16 @@ module Alu
     logic signed [63:0] b_sig;
     logic signed [127:0] product_sig;
 
+    //when doing A >>> B, both a and b must be signed for >>> to sign-extend
+    //However, we never want to shift by a negative amount
+    logic signed [6:0] b_sig_shamt;  //(max shift takes [5:0], so add one more bit for signed +)
+    assign b_sig_shamt = {1'b0, b[5:0]}; //explicitly make it positive, but signed
+
     assign a_sig = a;
     assign b_sig = b;
     assign product_sig = product;
 
     always_comb begin
-
 
         if (is_load || is_store || is_atomic) begin
             result = a + b;
@@ -90,7 +94,9 @@ module Alu
                         F3OP_XOR:  result = a ^ b;
                         F3OP_SRX: begin
                             if (funct7[5]) //SRA
-                                result = a >>> b[5:0]; // >>> is arithmetic shift
+                                // >>> is signed (arithmetic right-shift)
+                                // needs both operands signed to work;
+                                result = a_sig >>> b_sig_shamt; 
                             else //SRL
                                 result = a >> b[5:0];
                         end
@@ -166,7 +172,9 @@ module Alu
                         end
                         F3OP_SRX: begin
                             if (funct7[5]) begin //SRA
-                                product = a[31:0] >>> b[4:0];
+                                // >>> is signed (arithmetic right-shift)
+                                // needs both operands signed to work;
+                                product[31:0] = (signed'(a_sig[31:0]) >>> b_sig_shamt); 
                                 result = { { 32{ product[31] } }, product[31:0] };
                             end else begin //SRL
                                 product = a[31:0] >> b[4:0];
