@@ -278,7 +278,16 @@ module Decoder
             OP_OP_IMM, OP_IMM_32: begin
                 out.immed = immed_I;
                 out.alu_use_immed = 1;
-                out.funct7 = 0;
+
+                out.funct7 = 0; //Most immed-type ops don't have a meaningful funct7
+
+    
+                // NOTE: Shift ops have a smaller (6-bit) immediate, and so still use some
+                // of the bits from funct7 to distinguish SRA and SRL
+                if (funct3 inside {F3OP_SRX, F3OP_SLL})
+                    out.funct7[5] = funct7[5]; //(note, funct7[0] overlaps with shamt. 
+                                               //Just take theone we need.
+
                 {out.en_rs1, out.en_rs2, out.en_rd } = 3'b101; //no rs2
                 // ALU codes come from op
                 if (op_code == OP_IMM_32) begin
