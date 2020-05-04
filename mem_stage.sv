@@ -69,6 +69,11 @@ module MEM_Stage
                             (inst.is_atomic && atomic_stall)
                         );
 
+    logic dbg_inst_is_load;
+    logic dbg_inst_is_store;
+    assign dbg_inst_is_load = inst.is_load;
+    assign dbg_inst_is_store = inst.is_store;
+
     //Sfence should clear TLBs, clear the pipeline
     assign force_pipeline_flush = !is_bubble && !op_trapped && inst.is_sfence_vma;
     assign tlb_invalidate =       !is_bubble && !op_trapped && inst.is_sfence_vma;

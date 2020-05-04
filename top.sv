@@ -825,33 +825,47 @@ module top
 `ifdef CPU_DEBUG_PRINT_JUMPS
     // ========= DEBUG OUTPUT ON JUMPS
     always_ff @(posedge clk) begin
-        if (WB_reg.valid && (!(wb_stage.stall)) && WB_reg.curr_do_jump) begin
-
-            //if we're doing the same jump again
-            if(WB_reg.curr_pc == dbg_jump_from && WB_reg.curr_jump_target == dbg_jump_to) begin
-
-                //Print on the second iteration of a loop
-                // Or once every 10k instructions
-                if(dbg_jump_repeat == 1)
-                    $display("tick %x: looping %x ...", dbg_tick_counter, dbg_jump_to);
-                else if(dbg_jump_repeat % 3000 == 0)
-                    $display("tick %x: looping %x ... (%dk iterations)", dbg_tick_counter, 
-                                                              dbg_jump_to, dbg_jump_repeat/1000);
-                dbg_jump_repeat <= dbg_jump_repeat + 1;
+        if (WB_reg.valid && !wb_stage.stall) begin
 
 
-            //this is a different jump from previous
-            end else begin
+            // === Show when we're going to/from a trap
+            if (WB_reg.curr_trapped) begin
+                $display("tick %x: TRAPPING at PC:%x ...", dbg_tick_counter, WB_reg.curr_pc);
+                if (WB_reg.curr_deco.is_trap_ret)
+                    $display("=== (Returning from trap)");
+                else
+                    $display("=== Trap cause %d, trap val 0x%x", 
+                                    WB_reg.curr_trap_cause, WB_reg.curr_trap_val);
+                
 
-                if(dbg_jump_repeat > 1) begin //just got out of a tight loop
-                    $display("tick %x: ... looped %d times", dbg_tick_counter, dbg_jump_repeat);
+            // === Show when we're retiring a jump
+            end else if (WB_reg.curr_do_jump) begin
+                //if we're doing the same jump again
+                if(WB_reg.curr_pc == dbg_jump_from && WB_reg.curr_jump_target == dbg_jump_to) begin
+
+                    //Print on the second iteration of a loop
+                    // Or once every 10k instructions
+                    if(dbg_jump_repeat == 1)
+                        $display("tick %x: looping %x ...", dbg_tick_counter, dbg_jump_to);
+                    else if(dbg_jump_repeat % 3000 == 0)
+                        $display("tick %x: looping %x ... (%dk iterations)", dbg_tick_counter, 
+                                                                dbg_jump_to, dbg_jump_repeat/1000);
+                    dbg_jump_repeat <= dbg_jump_repeat + 1;
+
+
+                //this is a different jump from previous
+                end else begin
+
+                    if(dbg_jump_repeat > 1) begin //just got out of a tight loop
+                        $display("tick %x: ... looped %d times", dbg_tick_counter, dbg_jump_repeat);
+                    end
+
+                    $display("tick %x: jump to %x, from %x", dbg_tick_counter, 
+                                        WB_reg.curr_jump_target, WB_reg.curr_pc);
+                    dbg_jump_from <= WB_reg.curr_pc;
+                    dbg_jump_to <= WB_reg.curr_jump_target;
+                    dbg_jump_repeat <= 1;
                 end
-
-                $display("tick %x: jump to %x, from %x", dbg_tick_counter, 
-                                    WB_reg.curr_jump_target, WB_reg.curr_pc);
-                dbg_jump_from <= WB_reg.curr_pc;
-                dbg_jump_to <= WB_reg.curr_jump_target;
-                dbg_jump_repeat <= 1;
             end
 
         end
