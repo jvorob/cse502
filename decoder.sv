@@ -45,7 +45,7 @@ typedef struct packed {
     logic csr_immed; // csr immediate instruction
 
     // System
-    logic is_ecall;
+    logic is_ecall; //TODO: OLD: had been used for ecall hack
     logic is_break;     // Not currently used, remove this comment if this is eventually used
 
     // Privileged Instructions
@@ -75,6 +75,7 @@ module Decoder
     input [63:0] pc,
     output decoded_inst_t out,
 
+    input [1:0] curr_priv_mode,
 
     // == Can generate traps on illegal instructions
     output         gen_trap,
@@ -334,21 +335,21 @@ module Decoder
                         0010001 rs2   rs1   000 00000 1110011 HFENCE.BVMA
                         1010001 rs2   rs1   000 00000 1110011 HFENCE.GVMA
                         */
-                        if (immed_I == 0) begin
-                            $error("ECALL: not implemented, inst=%x, pc=%x", inst, pc);
-                            //TODO: update this to use thte trap mechanism
-                            out.is_ecall = 1;
-                            
-                            // As specified for the fake-os hack, write ecall() returned results to
-                            // a0.
-                            out.en_rd = 1;
-                            out.rd = A0;
+                        if (immed_I == 0) begin //ECALL: (just a simple trap)
+                            gen_trap = 1;
+                            if (curr_priv_mode == PRIV_U)
+                                gen_trap_cause = MCAUSE_ECALL_U;
+
+                            else if (curr_priv_mode == PRIV_S)
+                                gen_trap_cause = MCAUSE_ECALL_S;
+
+                            else if (curr_priv_mode == PRIV_M)
+                                gen_trap_cause = MCAUSE_ECALL_M;
+
                         end
-                        else if (immed_I == 1) begin
-                            // ebreak
-                            $error("EBREAK: not implemented, inst=%x, pc=%x", inst, pc);
-                            // $display("ebreak, inst=%x, pc=%x", inst, pc);
-                            // $finish;
+                        else if (immed_I == 1) begin //EBREAK (again, just a trap)
+                            gen_trap = 1;
+                            gen_trap_cause = MCAUSE_BREAKPOINT;
 						end
 
                         else if (immed_I == 12'b010) begin // URET
@@ -367,13 +368,18 @@ module Decoder
                         else if (immed_I == 12'b0001_0000_0101) begin
                             // WFI
                             // spec allows WFI to be a noop
-                            out.is_wfi = 1; //TODO: we should be able to get rid of all this logic
+                            out.is_wfi = 1; //TODO: we shouldn't need any logic for this?
                             // $display("wfi, inst=%x, pc=%x", inst, pc);
                         end
                         else if (funct7 == 7'b000_1001) begin
-                            // TODO: needs to invalidate TLB
-                            out.is_sfence_vma = 1;
-                            $display("NOT FULLY IMPLEMENTED: sfence.vma NEED TO DUMP TLB, inst=%x, pc=%x", inst, pc);
+
+                            //Can only be executed by M and U, else illegal instruction
+                            if (curr_priv_mode != PRIV_S && curr_priv_mode != PRIV_M) begin
+                                $display("Illegal instruction trap: trying to run SFENCE without privilege");
+                                gen_trap = 1;
+                                gen_trap_cause = MCAUSE_ILLEGAL_INST;
+                            end else 
+                                out.is_sfence_vma = 1;
                         end
                         else if (funct7 == 7'b001_0001) begin
                             $error("NOT IMPLEMENTED hfence.bvma, inst=%x, pc=%x", inst, pc);

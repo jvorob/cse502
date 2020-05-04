@@ -305,6 +305,8 @@ module top
         .pc(ID_reg.curr_pc),
         .out(ID_deco),
 
+        .curr_priv_mode(curr_priv_mode), //used to restrict access to priv. ops
+
         .gen_trap(ID_gen_trap),
         .gen_trap_cause(ID_gen_trap_cause),
         .gen_trap_val(ID_gen_trap_val)

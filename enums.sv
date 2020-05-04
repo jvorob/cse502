@@ -37,6 +37,16 @@ typedef enum bit[1:0] {
 } Privilege_Mode;
 
 typedef enum bit[63:0] {
+    MCAUSE_INST_MISALIGNED  = 0,
+    MCAUSE_ILLEGAL_INST     = 2,
+    MCAUSE_BREAKPOINT       = 3,
+    MCAUSE_LOAD_MISALIGNED  = 4,
+    MCAUSE_STORE_MISALIGNED = 6,
+
+    MCAUSE_ECALL_U = 8,
+    MCAUSE_ECALL_S = 9,
+    MCAUSE_ECALL_M = 11,
+
     MCAUSE_PAGEFAULT_I = 12,
     MCAUSE_PAGEFAULT_L = 13,
     MCAUSE_PAGEFAULT_S = 15
