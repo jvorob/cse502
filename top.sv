@@ -581,7 +581,8 @@ module top
         .dc_in_wlen       (),
         .dc_out_rdata     (mem_sys.dc_out_rdata),
         .dc_out_rvalid    (mem_sys.dc_out_rvalid),
-        .dc_out_write_done(mem_sys.dc_out_write_done)
+        .dc_out_write_done(mem_sys.dc_out_write_done),
+        .dc_out_page_fault(mem_sys.dc_out_page_fault)
     );
 
     // ------------------------END MEM STAGE----------------------------
@@ -780,6 +781,7 @@ module top
         .dc_in_wlen (mem_stage.dc_in_wlen),  // wlen is log(#bytes), 3 = 64bit write
 
         .dc_out_rdata(), .dc_out_rvalid(), .dc_out_write_done(),
+        .dc_out_page_fault(),
 
         .* //slurp all the AXI ports it needs
     );

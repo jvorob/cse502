@@ -43,7 +43,8 @@ module MEM_Stage
 
         input  logic [63:0] dc_out_rdata,
         input  logic        dc_out_rvalid,     //TODO: we should maybe merge rvalid and write_done
-        input  logic        dc_out_write_done
+        input  logic        dc_out_write_done,
+        input  logic        dc_out_page_fault // if (rvalid||write_done) && page_fault, ignore the data
 
 );
     logic [63:0] mem_rdata;
@@ -73,6 +74,25 @@ module MEM_Stage
     logic dbg_inst_is_store;
     assign dbg_inst_is_load = inst.is_load;
     assign dbg_inst_is_store = inst.is_store;
+
+    //=== Page faults:
+    assign gen_trap = (dc_out_rvalid || dc_out_write_done) && dc_out_page_fault;
+    always_comb begin
+        gen_trap_cause = 0;
+        gen_trap_val = 0;
+        if (dc_out_page_fault && inst.is_load) begin
+            gen_trap_cause = MCAUSE_PAGEFAULT_L;
+            gen_trap_val = dc_in_addr; //val is whichever virtual address faulted
+        end else if (dc_out_page_fault && inst.is_store) begin
+            gen_trap_cause = MCAUSE_PAGEFAULT_S;
+            gen_trap_val = dc_in_addr; //val is whichever virtual address faulted
+        end
+           
+        //TODO: actually handle page faults on atomics properly
+        if (dc_out_page_fault && inst.is_atomic)
+            $error("We never actually implemented atomics to properly handle page faults: TODO");
+    end
+
 
     //Sfence should clear TLBs, clear the pipeline
     assign force_pipeline_flush = !is_bubble && !op_trapped && inst.is_sfence_vma;

@@ -43,9 +43,11 @@ module MemorySystem
     input  logic [63:0] dc_in_wdata,
     input  logic [ 1:0] dc_in_wlen,  // wlen is log(#bytes), 3 = 64bit write
 
-    output logic [63:0] dc_out_rdata,
     output logic        dc_out_rvalid,     //TODO: we should maybe merge rvalid and write_done
+    output logic        dc_out_page_fault, // (only valid when rvalid==1) means data is garbage, there's
+                                           // a page fault happening
     output logic        dc_out_write_done,
+    output logic [63:0] dc_out_rdata,
 
 
     //==== Main AXI interface
@@ -160,30 +162,89 @@ module MemorySystem
 
 
     // Extra, muxed signals for D$
+    logic dcmux_virtual_en;
+
     logic        dcmux_en;
     logic [63:0] dcmux_in_addr;
     logic        dcmux_write_en; // write=1, read=0
     logic [63:0] dcmux_in_wdata;
     logic [ 1:0] dcmux_in_wlen;  // wlen is log(#bytes), 3 = 64bit write
 
-    // === D$ input mux: switches D$ between serving outside request or serving MMU
+
+    // === D$ input/output mux: switches D$ between serving outside request or serving MMU
     // When mmu is using D$, input is always a read
-    assign dcmux_in_addr         = mmu.use_dcache ? mmu.dcache_req_addr : dc_in_addr;
-    assign dcmux_en              = mmu.use_dcache ? 1                   : dc_en;
+    always_comb begin
+        //Normally, it just goes directly to/from pipeline interface
+        dcmux_in_wdata     = dc_in_wdata;
+        dcmux_in_wlen      = dc_in_wlen;
 
-    assign dcmux_write_en        = mmu.use_dcache ? 0 : dc_write_en; 
-    assign dcmux_in_wdata        = mmu.use_dcache ? 0 : dc_in_wdata;
-    assign dcmux_in_wlen         = mmu.use_dcache ? 0 : dc_in_wlen;
+        dc_out_rvalid      = dcache.dcache_valid;
+        dc_out_rdata       = dcache.rdata;
+        dc_out_write_done  = dcache.write_done; 
 
-    // When mmu is using D$, disable all output
-    assign dc_out_rdata       = mmu.use_dcache ? 0 : dcache.rdata;
-    assign dc_out_rvalid      = mmu.use_dcache ? 0 : dcache.dcache_valid;
-    assign dc_out_write_done  = mmu.use_dcache ? 0 : dcache.write_done; 
+        // MMU can take over dcache
+        if (mmu.use_dcache) begin
+            dc_out_rvalid = 0;  //Suppress output back to pipeline
+            dc_out_write_done = 0;
+            dc_out_rdata = 0;
+            // dc_out_page_fault will be 0, since mmu is always !virtual_en
+
+        // If we encounter a page fault in the tlb, respond immediately, shut down dcache
+        end else if (dc_out_page_fault && !mmu.use_dcache) begin
+            dc_out_rvalid = 1; // We have a response for the pipeline rn: it's a page fault
+            dc_out_write_done = dc_write_en; // If it was a write, set write_done (TODO: this is redundant)
+            dc_out_rdata = 0;
+        end
+    end
+
+    //NOTE: input signals do d$ can cause circular logic warnings, so do them out here
+    // MMU forces dcache to do reads, in physical mode, of its req addr
+    assign dcmux_en         = mmu.use_dcache ? 1                   : (dc_en &&       !dc_out_page_fault);
+    assign dcmux_write_en   = mmu.use_dcache ? 0                   : (dc_write_en && !dc_out_page_fault);
+    assign dcmux_virtual_en = mmu.use_dcache ? 0                   : virtual_en; 
+    assign dcmux_in_addr    = mmu.use_dcache ? mmu.dcache_req_addr : ( dc_in_addr );
 
 
-    // Switch DCache to physical mode when MMU is using it
-    logic dcmux_virtual_en;
-    assign dcmux_virtual_en = virtual_en && !mmu.use_dcache;
+
+    // =========== D$ permissions checking
+    always_comb begin
+        dc_out_page_fault = 0;
+
+        // If we're in virtual mode and succesfully found a mapping, check the perms
+        // (NOTE: don't assert page fault if MMU is overriding dcache)
+        if ( virtual_en && dtlb.pa_valid && !mmu.use_dcache) begin
+            if ( dtlb.pte_perm[0] == 0) begin // V: must be valid
+                $display("Dcache page fault: not valid");
+                dc_out_page_fault = 1;
+
+            end else if (dc_write_en  && dtlb.pte_perm[2] == 0) begin // W: if writing, must be writable
+                $display("Dcache page fault: not writable");
+                dc_out_page_fault = 1;
+            end else if (!dc_write_en && dtlb.pte_perm[1] == 0) begin // R: if reading, must be readable
+                $display("Dcache page fault: not readable");
+                dc_out_page_fault = 1;
+
+            // In user mode, can only access user pages
+            end else if ( dtlb.pte_perm[4] == 0 && curr_priv_mode == PRIV_U) begin // U: 
+                $display("Dcache page fault: in usermode accessing !U page");
+                dc_out_page_fault = 1;
+
+            // In supervisor mode, can only access U pages only if SUM bit set
+            end else if ( dtlb.pte_perm[4] == 1 && curr_priv_mode == PRIV_S && !csr_SUM) begin // U:
+                $display("Dcache page fault: in S mode accessing a U page");
+                dc_out_page_fault = 1; //Supervisor can only access user pages if SUM set
+
+            end else if ( dtlb.pte_perm[6] == 0) begin // A: fault so OS can set accessed bit
+                $display("Dcache page fault: setting A");
+                dc_out_page_fault = 1;
+
+            end else if ( dtlb.pte_perm[7] == 0 && dc_write_en) begin // D: 
+                $display("Dcache page fault: setting D");
+                dc_out_page_fault = 1; //if writing, fault so OS can set dirty bit
+            end
+        end
+    end
+
 
     Dcache dcache (
         .clk, 
