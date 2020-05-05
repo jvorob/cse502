@@ -13,7 +13,7 @@
 
 
 `define CPU_DEBUG_PRINT_JUMPS  //Enables jump-logging output
-`define CPU_MAX_CYCLES_TO_RUN  'h610000  //shuts down the cpu after this many clocks
+`define CPU_MAX_CYCLES_TO_RUN  'hF001000  //shuts down the cpu after this many clocks
 
 module top
 #(

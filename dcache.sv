@@ -243,13 +243,14 @@ module Dcache
                                 2'h3: mem[index][mru][offset] <= wdata;
                                 endcase
 
-                                // Also notify do_pending_write to make Mike's ecall hacks work 
-                                case(wlen)
-                                2'h0: do_pending_write(addr, wdata, 1);
-                                2'h1: do_pending_write({addr[ADDR_WIDTH-1:1], 1'b0}, wdata, 2);
-                                2'h2: do_pending_write({addr[ADDR_WIDTH-1:2], 2'b00}, wdata, 4);
-                                2'h3: do_pending_write({addr[ADDR_WIDTH-1:3], 3'b000}, wdata, 8);
-                                endcase
+                                // TODO: NOT NEEDED, WAS ONLY FOR ECALL HACK
+                                //  // Also notify do_pending_write to make Mike's ecall hacks work 
+                                //  case(wlen)
+                                //  2'h0: do_pending_write(addr, wdata, 1);
+                                //  2'h1: do_pending_write({addr[ADDR_WIDTH-1:1], 1'b0}, wdata, 2);
+                                //  2'h2: do_pending_write({addr[ADDR_WIDTH-1:2], 2'b00}, wdata, 4);
+                                //  2'h3: do_pending_write({addr[ADDR_WIDTH-1:3], 3'b000}, wdata, 8);
+                                //  endcase
 
                                 line_dirty[index][mru] <= 1'b1;
                             end

@@ -314,6 +314,12 @@ typedef enum bit[2:0] {
     F3LS_WU       = 3'b110
 } Funct3_LoadStore;
 
+// Values of F3 for Misc-mem instruction
+typedef enum bit[2:0] {
+    F3MM_FENCE    = 3'b000,
+    F3MM_FENCE_I  = 3'b001
+} Funct3_MiscMem;
+
 typedef enum bit[4:0] {
     F7AMO_LR    = 5'b00010,
     F7AMO_SC    = 5'b00011,

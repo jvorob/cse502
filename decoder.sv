@@ -309,9 +309,16 @@ module Decoder
             // ==== ETC: We dont want to implement these rn
 
             OP_MISC_MEM: begin
-                out.immed = 0; // Might need to change this
-                out.funct7 = 0;
-                {out.en_rs1, out.en_rs2, out.en_rd } = 3'b000; // I think this is right?
+                if (funct3 == F3MM_FENCE) begin
+                    //We have no multicore, so FENCE should just be a noop
+                    out.immed = 0;
+                    out.funct7 = 0;
+                    { out.en_rs1, out.en_rs2, out.en_rd } = 3'b000;
+
+                end else if (funct3 == F3MM_FENCE) begin
+                    //TODO: needs to synchronize I$ and D$ (probably just flushes the I$?)
+                    $error("Hit FENCE.I: not implemented");
+                end
             end
 
             OP_SYSTEM: begin
@@ -439,7 +446,7 @@ module Decoder
                         out.csr_immed = 1;
                     end
                     default: begin
-                        $display("Invalid instruction for opcode=OP_SYSTEM. funct3 = %x.", funct3);
+                        $error("Invalid instruction for opcode=OP_SYSTEM. funct3 = %x.", funct3);
                     end
                 endcase
             end
@@ -447,7 +454,7 @@ module Decoder
             OP_AMO: begin 
                 if (funct3 == 3'b010) out.alu_width_32 = 1;
                 else if (funct3 == 3'b011) out.alu_width_32 = 0;
-                else $display("Invalid instruction for opcode=OP_AMO, funct3 = %x.", funct3);
+                else $error("Invalid instruction for opcode=OP_AMO, funct3 = %x.", funct3);
 
                 out.alu_use_immed = 1;
                 out.is_atomic = 1;
@@ -456,9 +463,11 @@ module Decoder
                     F7AMO_LR: begin
                         out.en_rs2 = 0;
                         out.is_load = 1;
+                        $error("Hit LR operation: not implemented");
                     end
                     F7AMO_SC: begin
                         out.is_store = 1;
+                        $error("Hit SC operation: not implemented");
                     end
                     F7AMO_SWAP: begin
                         out.is_swap = 1;
@@ -487,7 +496,7 @@ module Decoder
                     F7AMO_MAXU: begin
                         out.alu_op = ALU_OP_MAXU;
                     end
-                    default: $display("Invalid funct7 for OP_AMO, funct7[6:2] = %x.", funct7[6:2]);
+                    default: $error("Invalid funct7 for OP_AMO, funct7[6:2] = %x.", funct7[6:2]);
                 endcase
             end
 
@@ -495,7 +504,7 @@ module Decoder
                 if (valid) $display("opcode = 0");
             end
             default: begin
-                if (valid) $display("Did not recognize opcode category. inst = %x, pc = %x.", inst, pc);
+                if (valid) $error("Did not recognize opcode category. inst = %x, pc = %x.", inst, pc);
             end
         endcase
     end
