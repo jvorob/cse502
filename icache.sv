@@ -2,6 +2,7 @@
 `define ICACHE
 
 `include "lru.sv"
+`include "CAM.sv"
 
 module Icache
 #(
@@ -44,7 +45,7 @@ module Icache
     input   wire                   icache_m_axi_rvalid,
     output  wire                   icache_m_axi_rready,
     input   wire                   icache_m_axi_acvalid,
-    output  wire                   icache_m_axi_acready,
+    output  reg                    icache_m_axi_acready,
     input   wire [ADDR_WIDTH-1:0]  icache_m_axi_acaddr,
     input   wire [3:0]             icache_m_axi_acsnoop
 );
@@ -61,13 +62,23 @@ module Icache
     reg [DATA_WIDTH-1:0] mem [SETS][WAYS][LINE_LEN];
     reg [ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN] line_tag [SETS][WAYS];
     reg line_valid [SETS][WAYS];
+    reg line_prefetched[SETS][WAYS];
     reg [LRU_LEN-1:0] line_lru [SETS];
     
+    wire queue_push = (state == 3'h2) && !queue_full;
+    wire queue_pop = !icache_m_axi_acvalid && icache_m_axi_rvalid && icache_m_axi_rlast;
+    wire queue_empty;
+    wire queue_full;
+    wire queue_cam_exists;
+    wire [ADDR_WIDTH:LOG_LINE_LEN+LOG_WORD_LEN]  queue_data_in = {1'b0, rplc_pc[ADDR_WIDTH-1:LOG_LINE_LEN+LOG_WORD_LEN]};
+    wire [ADDR_WIDTH:LOG_LINE_LEN+LOG_WORD_LEN]  queue_data_out;
+    wire [ADDR_WIDTH-1:LOG_LINE_LEN+LOG_WORD_LEN] queue_cam_data = fetch_addr[ADDR_WIDTH-1:LOG_LINE_LEN+LOG_WORD_LEN];
+
     reg [2:0] state;
-    reg [63:0] rplc_pc;
+    reg [ADDR_WIDTH-1:0] rplc_pc;
     reg [LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_WORD_LEN] rplc_offset;
-    wire [LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN] rplc_index = rplc_pc[LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN];
-    wire [ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN] rplc_tag = rplc_pc[ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN];
+    wire [LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN] rplc_index = queue_data_out[LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN];
+    wire [ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN] rplc_tag = queue_data_out[ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN];
     reg [1:0] rplc_way;
 
     wire [LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN] snoop_index = icache_m_axi_acaddr[LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN];
@@ -104,15 +115,13 @@ module Icache
     end
 
     assign out_inst = fetch_addr[LOG_WORD_LEN-1] ? inst_word[63:32] : inst_word[31:0];
-    assign icache_m_axi_araddr = {rplc_pc[ADDR_WIDTH-1:LOG_WORD_LEN], {LOG_WORD_LEN{1'b0}}};
-    assign icache_m_axi_acready = state == 3'h0;
+    assign icache_m_axi_araddr = {rplc_pc[ADDR_WIDTH-1:LOG_LINE_LEN+LOG_WORD_LEN], {LOG_LINE_LEN{1'b0}}, {LOG_WORD_LEN{1'b0}}};
     assign icache_m_axi_arvalid = state == 3'h1;
-    assign icache_m_axi_rready = state == 3'h2;
+    assign icache_m_axi_rready = !icache_m_axi_acvalid && !queue_empty;
 
     always_ff @ (posedge clk) begin
         if (reset) begin
             state <= 3'h0;
-            line_valid <= '{SETS{'{WAYS{1'b0}}}};
             rplc_pc <= 0;
             
             icache_m_axi_arid <= 0;      // transaction id
@@ -122,43 +131,76 @@ module Icache
             icache_m_axi_arlock <= 1'b0; // no lock
             icache_m_axi_arcache <= 4'h0;// no cache
             icache_m_axi_arprot <= 3'h6; // enum, means something
+            icache_m_axi_acready <= 1'b1;
         end else begin
             case(state)
             3'h0: begin  // idle
-
-                if(icache_m_axi_acvalid && (icache_m_axi_acsnoop == 4'hd)) begin // snoop invalidation
-                    for (snoop_way = 0; snoop_way < WAYS; snoop_way = snoop_way + 1)
-                        if(line_tag[snoop_index][snoop_way] == snoop_tag)
-                            line_valid[snoop_index][snoop_way] <= 1'b0;
-
                 // start a cache miss
-                end else if(icache_enable && !icache_valid && (!virtual_mode || translated_addr_valid)) 
+                if(!icache_valid && !icache_m_axi_acvalid && icache_enable && (!virtual_mode || translated_addr_valid) && !queue_cam_exists) begin 
                     state <= 3'h1;
                     rplc_pc <= fetch_addr;
-                    rplc_way <= !line_valid[index][0] ? 2'h0 : !line_valid[index][1] ? 2'h1 : !line_valid[index][2] ? 2'h2 : !line_valid[index][3] ? 2'h3 : line_lru[index][1:0];
+                end
             end
             3'h1: begin // address channel
-               // $display("icache fetch request addr: %x", icache_m_axi_araddr);
-                line_tag[rplc_index][rplc_way] <= rplc_tag;
-                line_valid[rplc_index][rplc_way] <= 1'b0;
-                rplc_offset <= rplc_pc[LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_WORD_LEN];
+                // $display("icache fetch request addr: %x", icache_m_axi_araddr);
                 if(icache_m_axi_arready)
                     state <= 3'h2;
             end
-            3'h2: begin // data channel
-                if(icache_m_axi_rvalid) begin
-                    mem[rplc_index][rplc_way][rplc_offset] <= icache_m_axi_rdata;
-                    rplc_offset <= rplc_offset + 1;
-                    if(icache_m_axi_rlast) begin
-                        line_valid[rplc_index][rplc_way] <= 1'b1;
-                        state <= 3'h0;
-                    end
-                end
+            3'h2: begin
+                if(!queue_full)
+                    state <= 3'h0;
             end
             default: state <= 3'h0;
             endcase
         end
     end
+
+    always_ff @ (posedge clk) begin
+        if (reset) begin
+            line_valid <= '{SETS{'{WAYS{1'b0}}}};
+            rplc_offset <= 0;
+            rplc_way <= 2'h0;
+        end else begin
+            if(icache_m_axi_acvalid && (icache_m_axi_acsnoop == 4'hd)) begin // snoop invalidation
+                for (snoop_way = 0; snoop_way < WAYS; snoop_way = snoop_way + 1)
+                    if(line_tag[snoop_index][snoop_way] == snoop_tag)
+                        line_valid[snoop_index][snoop_way] <= 1'b0;
+            end else if(!queue_empty && icache_m_axi_rvalid) begin
+                mem[rplc_index][rplc_way][rplc_offset] <= icache_m_axi_rdata;
+                if(icache_m_axi_rlast) begin
+                    line_prefetched[rplc_index][rplc_way] <= queue_data_out[ADDR_WIDTH];
+                    rplc_offset <= 0;
+                    rplc_way <= !line_valid[rplc_index][0] ? 2'h0 : !line_valid[rplc_index][1] ? 2'h1 : !line_valid[rplc_index][2] ? 2'h2 : !line_valid[rplc_index][3] ? 2'h3 : line_lru[rplc_index][1:0];
+                    line_tag[rplc_index][rplc_way] <= rplc_tag;
+                    line_valid[rplc_index][rplc_way] <= 1'b1;
+                end else begin
+                    rplc_offset <= rplc_offset + 1;
+                    line_valid[rplc_index][rplc_way] <= 1'b0;
+                end
+            end else
+                rplc_way <= !line_valid[rplc_index][0] ? 2'h0 : !line_valid[rplc_index][1] ? 2'h1 : !line_valid[rplc_index][2] ? 2'h2 : !line_valid[rplc_index][3] ? 2'h3 : line_lru[rplc_index][1:0];
+        end
+    end
+
+    CAM
+    #(
+        .WIDTH(ADDR_WIDTH-LOG_LINE_LEN-LOG_WORD_LEN+1),
+        .CAM_WIDTH(ADDR_WIDTH-LOG_LINE_LEN-LOG_WORD_LEN), 
+        .DEPTH(4),
+        .LOG_DEPTH(2)
+    )
+    queue
+    (
+        .push(queue_push),
+        .pop(queue_pop),
+        .empty(queue_empty),
+        .full(queue_full),
+        .data_in(queue_data_in),
+        .data_out(queue_data_out),
+        .cam_data(queue_cam_data),
+        .cam_exists(queue_cam_exists),
+        .*
+    );
 
 endmodule
 
