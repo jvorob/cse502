@@ -161,9 +161,9 @@ module AXI_interconnect
     assign dcache_m_axi_rresp = m_axi_rresp;
     assign icache_m_axi_rlast = m_axi_rlast;
     assign dcache_m_axi_rlast = m_axi_rlast;
-    assign icache_m_axi_rvalid = m_axi_rid[0] ? 1'b0 : m_axi_rvalid;
-    assign dcache_m_axi_rvalid = m_axi_rid[0] ? m_axi_rvalid : 1'b0;
-    assign m_axi_rready = m_axi_rid[0] ? dcache_m_axi_rready : icache_m_axi_rready;
+    assign icache_m_axi_rvalid = m_axi_rid[ID_WIDTH-1] ? 1'b0 : m_axi_rvalid;
+    assign dcache_m_axi_rvalid = m_axi_rid[ID_WIDTH-1] ? m_axi_rvalid : 1'b0;
+    assign m_axi_rready = m_axi_rid[ID_WIDTH-1] ? dcache_m_axi_rready : icache_m_axi_rready;
 
     // snoop channel
     assign icache_m_axi_acaddr = m_axi_acaddr;

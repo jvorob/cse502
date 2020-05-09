@@ -11,56 +11,36 @@ module CAM
 (
     input                   clk,
     input                   reset,
+    output                  full,
     input                   push,
     input                   pop,
-    output                  empty,
-    output                  full,
+    output  [LOG_DEPTH-1:0] push_index,
+    input   [LOG_DEPTH-1:0] pop_index,
     input   [WIDTH-1:0]     data_in,
     output  [WIDTH-1:0]     data_out,
     input   [CAM_WIDTH-1:0] cam_data,
     output                  cam_exists
 );
 
-    reg [WIDTH-1:0]     data        [DEPTH];
-    reg [DEPTH-1:0]     valid_data;
-    reg [LOG_DEPTH-1:0] head;
-    reg [LOG_DEPTH-1:0] tail;
+    reg [WIDTH-1:0] data[DEPTH];
+    reg [DEPTH-1:0] valid_data;
 
-    assign empty = ~|valid_data;
     assign full = &valid_data;
-    assign data_out = data[head];
+    assign data_out = data[pop_index];
 
-    // push logic
-    always_ff @ (posedge clk) begin
-        if (reset)
-            tail <= 0;
-        else if (push) begin
-            data[tail] <= data_in;
-            tail <= tail + 1;
-            assert(!full);
-        end
-    end
-
-    // pop logic
-    always_ff @ (posedge clk) begin
-        if (reset)
-            head <= 0;
-        else if (pop) begin
-            head <= head + 1;
-            assert(!empty);
-        end
-    end
-
-    // valid_data logic
     integer i;
     always_ff @ (posedge clk) begin
         if (reset)
             for (i = 0; i < DEPTH; i = i + 1)
                 valid_data[i] <= 1'b0;
-        else if (push)
-            valid_data[tail] <= 1'b1;
-        else if (pop)
-            valid_data[head] <= 1'b0;
+        else if (push) begin
+            assert(!valid_data[push_index]);
+            valid_data[push_index] <= 1'b1;
+            data[push_index] <= data_in;
+        end else if (pop) begin
+            assert(valid_data[pop_index]);
+            valid_data[pop_index] <= 1'b0;
+        end
     end
 
     // CAM logic
@@ -68,9 +48,17 @@ module CAM
     always_comb begin
         cam_exists = 1'b0;
         for (j = 0; j < DEPTH; j = j + 1)
-            if (valid_data[j] && cam_data == data[j][CAM_WIDTH-1:0]) begin
+            if (valid_data[j] && cam_data == data[j][CAM_WIDTH-1:0])
                 cam_exists = 1'b1;
-            end
+    end
+
+    // push_index logic
+    integer k;
+    always_comb begin
+        push_index = 0;
+        for (k = 0; k < DEPTH; k = k + 1)
+            if (!valid_data[k])
+                push_index = k;
     end
 endmodule
 

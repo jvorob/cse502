@@ -204,7 +204,7 @@ module Dcache
             rplc_addr <= 0;
             IO_reg <= 0;
             
-            dcache_m_axi_arid <= 1;      // transaction id
+            dcache_m_axi_arid <= 1'b1 << (ID_WIDTH-1);      // transaction id
             dcache_m_axi_arburst <= 2'h2;// 2 in enum, bursttype=wrap
             dcache_m_axi_arlock <= 1'b0; // no lock
             dcache_m_axi_arcache <= 4'h0;// no cache
