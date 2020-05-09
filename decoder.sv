@@ -463,11 +463,11 @@ module Decoder
                     F7AMO_LR: begin
                         out.en_rs2 = 0;
                         out.is_load = 1;
-                        $error("Hit LR operation: not implemented");
+                        //$error("Hit LR operation: not implemented");
                     end
                     F7AMO_SC: begin
                         out.is_store = 1;
-                        $error("Hit SC operation: not implemented");
+                        //$error("Hit SC operation: not implemented");
                     end
                     F7AMO_SWAP: begin
                         out.is_swap = 1;

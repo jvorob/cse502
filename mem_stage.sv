@@ -66,7 +66,7 @@ module MEM_Stage
     logic atomic_stall; //this gets set by the atomic state machine, if we're in an atomic op
     assign stall = !is_bubble && !op_trapped &&  (
                             (inst.is_load   && !dc_out_rvalid) || 
-                            (inst.is_store  && !dc_out_write_done) ||
+                            (inst.is_store  && !dc_out_write_done && atomic_state != 2'b10) ||
                             (inst.is_atomic && atomic_stall)
                         );
 
@@ -183,15 +183,19 @@ module MEM_Stage
                 end
             end
         end
-        else if (atomic_state == 1)
+        else if (atomic_state == 1) begin
             if (dc_out_write_done) begin
                 atomic_state <= 2;
             end
-        else if (atomic_state == 2)
-            if (advance)
+        end
+        else if (atomic_state == 2'b10) begin
+            if (advance == 1) begin
                 atomic_state <= 0;
-        else if (atomic_state == 3)
+            end
+        end
+        else if (atomic_state == 3) begin
             atomic_state <= 0;
+        end
     end
 
     Atomic_alu atomic_alu(

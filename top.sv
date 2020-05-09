@@ -13,7 +13,7 @@
 
 
 `define CPU_DEBUG_PRINT_JUMPS  //Enables jump-logging output
-`define CPU_MAX_CYCLES_TO_RUN  'hF001000  //shuts down the cpu after this many clocks
+//`define CPU_MAX_CYCLES_TO_RUN  'hF001000  //shuts down the cpu after this many clocks
 
 module top
 #(
@@ -829,7 +829,7 @@ module top
 `ifdef CPU_DEBUG_PRINT_JUMPS
     // ========= DEBUG OUTPUT ON JUMPS
     always_ff @(posedge clk) begin
-        if (WB_reg.valid && !wb_stage.stall) begin
+        if (WB_reg.valid && !wb_stage.stall && dbg_tick_counter > 64'h0000_02a2_0000) begin
 
 
             // === Show when we're going to/from a trap
