@@ -91,6 +91,7 @@ int main(int argc, char* argv[]) {
 	TICK(); // 0
 	TICK(); // 1
 	top.reset = 0;
+    top.mtime = 0;
 
 	const char* SHOWCONSOLE = getenv("SHOWCONSOLE");
 	if (SHOWCONSOLE?(atoi(SHOWCONSOLE)!=0):0) sys.console();

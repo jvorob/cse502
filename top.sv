@@ -12,7 +12,7 @@
 `include "privilege.sv"
 
 
-`define CPU_DEBUG_PRINT_JUMPS  //Enables jump-logging output
+//`define CPU_DEBUG_PRINT_JUMPS  //Enables jump-logging output
 //`define CPU_MAX_CYCLES_TO_RUN  'hF001000  //shuts down the cpu after this many clocks
 
 module top
@@ -26,6 +26,7 @@ module top
   input  clk,
          reset,
          hz32768timer,
+  input  [63:0] mtime,
 
   // 64-bit addresses of the program entry point and initial stack pointer
   input  [63:0] entry,
@@ -513,7 +514,11 @@ module top
     //other-modules section
     Privilege_System priv_sys(
         .clk,
+        .hz32768timer,
         .reset,
+
+        .inst_retire(WB_reg.valid && WB_reg.wr_en),
+        .mtime,
 
         // ==== MEM CSR op inputs (TODO: move these into mem_stage and rename)
         .valid(MEM_reg.valid),
