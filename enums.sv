@@ -65,6 +65,13 @@ typedef enum bit[11:0] {
     CSR_UTVAL       = 12'h043,
     CSR_UIP         = 12'h044,
     
+    // User Counter/Timers
+    CSR_CYCLE           = 12'hc00,
+    CSR_TIME            = 12'hc01,
+    CSR_INSTRET         = 12'hc02,
+    CSR_HPMCOUNTER3     = 12'hc03,
+    CSR_HPMCOUNTER31    = 12'hc1f,
+
     // Supervisor Trap Setup
     CSR_SSTATUS     = 12'h100,
     CSR_SEDELEG     = 12'h102,
@@ -100,7 +107,22 @@ typedef enum bit[11:0] {
     CSR_MEPC     = 12'h341,
     CSR_MCAUSE   = 12'h342,
     CSR_MTVAL    = 12'h343,
-    CSR_MIP      = 12'h344
+    CSR_MIP      = 12'h344,
+
+    // Machine Counter/Timers
+    CSR_MCYCLE   = 12'hb00,
+    CSR_MINSTRET = 12'hb02,
+    
+    CSR_MHPMCOUNTER3    = 12'hb03,
+    CSR_MHPMCOUNTER4    = 12'hb04,
+    CSR_MHPMCOUNTER31   = 12'hb1f,
+
+    // Machine Counter Setup
+    CSR_MCOUNTINHIBIT   = 12'h320,
+    CSR_MHPMEVENT3      = 12'h323,
+    CSR_MHPMEVENT4      = 12'h324,
+    CSR_MHPMEVENT31     = 12'h33f
+
 } csr_names;
 
 // Register name mappings

@@ -6,9 +6,12 @@ using namespace std;
 
 static uint64_t ticks_to_timer = 0;
 void rtc_tick(Vtop* top) {
-    if (ticks_to_timer == 1) top->hz32768timer = 1;
-    else if (ticks_to_timer == 0) {
+    if (ticks_to_timer == 1) {
         top->hz32768timer = 1;
+        top->mtime++;
+    }
+    else if (ticks_to_timer == 0) {
+        top->hz32768timer = 0;
         ticks_to_timer = 1000000000000ULL/32768/System::sys->ps_per_clock;
     }
     --ticks_to_timer;

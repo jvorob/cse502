@@ -9,7 +9,11 @@ module Privilege_System
 )
 (
     input clk,
+    input hz32768timer,
     input reset,
+
+    input inst_retire,
+    input [63:0] mtime,
 
     // target address of instruction
     input [CSR-1:0] addr,
@@ -54,7 +58,6 @@ module Privilege_System
     assign csr_rw_perm = addr[CSR-1:CSR-2];
     assign lowest_priv = addr[CSR-3:CSR-4];
 
-    assign csr_result = csrs[addr]; // Combinationally read CSRs
     assign satp_csr = csrs[CSR_SATP];
 
     logic is_interrupt;
@@ -63,7 +66,34 @@ module Privilege_System
     assign curr_priv_mode = current_mode;
     assign modifying_satp = valid && is_csr && (addr == CSR_SATP);
 
+    always_comb begin
+        if (addr == CSR_CYCLE) begin
+            csr_result = csrs[CSR_MCYCLE];
+        end
+        else if (addr == CSR_INSTRET) begin
+            csr_result = csrs[CSR_MINSTRET];
+        end
+        else if (addr == CSR_TIME) begin
+            csr_result = mtime;
+        end
+        else begin
+            csr_result = csrs[addr]; // Combinationally read CSRs
+        end
+    end
+
     always_ff @(posedge clk) begin
+        csrs[CSR_MCYCLE] <= csrs[CSR_MCYCLE] + 1;
+
+        // Not sure if this is necessary since 'time' is a read-only shadow of MTIME which we get from top
+        if (hz32768timer == 1) begin
+            csrs[CSR_TIME] <= csrs[CSR_TIME] + 1;
+        end
+        /////////////////////////////////////////////////
+
+        if (inst_retire == 1) begin
+            csrs[CSR_MINSTRET] <= csrs[CSR_MINSTRET] + 1;
+        end
+        
         if (reset) begin
             integer i;
             for (i = 0; i < 4096; i++)
@@ -81,7 +111,8 @@ module Privilege_System
         end
         else if (valid && is_csr) begin
             
-            if (addr == CSR_MISA) begin
+            if (addr == CSR_MISA || addr == CSR_MCOUNTINHIBIT || addr == CSR_SCOUNTEREN ||
+                (addr >= CSR_MHPMCOUNTER3 && addr <= CSR_MHPMCOUNTER31) || (addr >= CSR_MHPMEVENT3 && addr <= CSR_MHPMEVENT31)) begin
                 // do nothing
             end
             else if (csr_rw) begin
@@ -217,6 +248,7 @@ module Privilege_System
             epc_addr = 0;
         end
     end
+
 
 endmodule
 
