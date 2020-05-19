@@ -67,13 +67,13 @@ module Icache
     
     wire queue_full;
     wire queue_cam_exists;
-    wire queue_push = (state == 3'h1) && icache_m_axi_arready && !queue_full;
+    wire queue_push = (state == 3'h1 || state == 3'h3) && icache_m_axi_arready && !queue_full;
     wire queue_pop = (receive_state == 1'b1) && icache_m_axi_rvalid && icache_m_axi_rlast;
     wire [1:0] queue_push_index;
     wire [1:0] queue_pop_index = icache_m_axi_rid[1:0];
-    wire [ADDR_WIDTH:LOG_LINE_LEN+LOG_WORD_LEN]  queue_data_in = {1'b0, rplc_pc[ADDR_WIDTH-1:LOG_LINE_LEN+LOG_WORD_LEN]};
+    wire [ADDR_WIDTH:LOG_LINE_LEN+LOG_WORD_LEN]  queue_data_in = {(state == 3'h3), rplc_pc[ADDR_WIDTH-1:LOG_LINE_LEN+LOG_WORD_LEN]};
     wire [ADDR_WIDTH:LOG_LINE_LEN+LOG_WORD_LEN]  queue_data_out;
-    wire [ADDR_WIDTH-1:LOG_LINE_LEN+LOG_WORD_LEN] queue_cam_data = fetch_addr[ADDR_WIDTH-1:LOG_LINE_LEN+LOG_WORD_LEN];
+    wire [ADDR_WIDTH-1:LOG_LINE_LEN+LOG_WORD_LEN] queue_cam_data = (state == 3'h2) ? prefetch_line : fetch_addr[ADDR_WIDTH-1:LOG_LINE_LEN+LOG_WORD_LEN];
 
     reg [2:0] state;
     reg receive_state;
@@ -82,6 +82,10 @@ module Icache
     wire [LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN] rplc_index = queue_data_out[LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN];
     wire [ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN] rplc_tag = queue_data_out[ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN];
     reg [1:0] rplc_way;
+
+    wire [ADDR_WIDTH-1:LOG_LINE_LEN+LOG_WORD_LEN] prefetch_line = rplc_pc[ADDR_WIDTH-1:LOG_LINE_LEN+LOG_WORD_LEN] + 1;
+    wire [ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN] prefetch_tag = prefetch_line[ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN];
+    wire [LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN] prefetch_index = prefetch_line[LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN];
 
     wire [LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN] snoop_index = icache_m_axi_acaddr[LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN-1:LOG_LINE_LEN+LOG_WORD_LEN];
     wire [ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN] snoop_tag = icache_m_axi_acaddr[ADDR_WIDTH-1:LOG_SETS+LOG_LINE_LEN+LOG_WORD_LEN];
@@ -109,6 +113,15 @@ module Icache
             end
     end
 
+    reg line_exists;
+    integer prefetch_way;
+    always_comb begin
+        line_exists = 1'b0;
+        for (prefetch_way = 0; prefetch_way < WAYS; prefetch_way = prefetch_way + 1)
+            if (prefetch_tag == line_tag[prefetch_index][prefetch_way] && line_valid[prefetch_index][prefetch_way])
+                line_exists = 1'b1;
+    end
+
     always_ff @ (posedge clk) begin
         if (reset)
             line_lru <= '{SETS{5'b0_01_00}}; // 3 2 1 0
@@ -119,13 +132,14 @@ module Icache
     assign out_inst = fetch_addr[LOG_WORD_LEN-1] ? inst_word[63:32] : inst_word[31:0];
     assign icache_m_axi_arid = queue_push_index;
     assign icache_m_axi_araddr = {rplc_pc[ADDR_WIDTH-1:LOG_LINE_LEN+LOG_WORD_LEN], {LOG_LINE_LEN{1'b0}}, {LOG_WORD_LEN{1'b0}}};
-    assign icache_m_axi_arvalid = (state == 3'h1) && !queue_full;
+    assign icache_m_axi_arvalid = (state == 3'h1 || state == 3'h3) && !queue_full;
     assign icache_m_axi_rready = receive_state == 1'b1;
     assign icache_m_axi_acready = receive_state == 1'b0;
 
     always_ff @ (posedge clk) begin
         if (reset) begin
             state <= 3'h0;
+            line_prefetched <= '{SETS{'{WAYS{1'b0}}}};
             rplc_pc <= 0;
             
             icache_m_axi_arlen <= 8'h7;  // +1, =8 words requested
@@ -138,13 +152,31 @@ module Icache
             case(state)
             3'h0: begin  // idle
                 // start a cache miss
-                if(!icache_valid && !icache_m_axi_acvalid && icache_enable && (!virtual_mode || translated_addr_valid) && !queue_cam_exists) begin 
-                    state <= 3'h1;
-                    rplc_pc <= fetch_addr;
+                if(!icache_m_axi_acvalid && icache_enable && (!virtual_mode || translated_addr_valid)) begin
+                    if (icache_valid) begin
+                        if (line_prefetched[index][mru]) begin
+                            state <= 3'h2;
+                            line_prefetched[index][mru] <= 1'b0;
+                            rplc_pc <= fetch_addr;
+                        end
+                    end else if(!queue_cam_exists) begin
+                        state <= 3'h1;
+                        rplc_pc <= fetch_addr;
+                    end
                 end
             end
             3'h1: begin // address channel
-                // $display("icache fetch request addr: %x", icache_m_axi_araddr);
+                if(icache_m_axi_arready && !queue_full)
+                    state <= 3'h2;
+            end
+            3'h2: begin // prefetch
+                if(!line_exists && !queue_cam_exists && prefetch_index != 0) begin
+                    state <= 3'h3;
+                    rplc_pc <= {prefetch_line, {LOG_LINE_LEN{1'b0}}, {LOG_WORD_LEN{1'b0}}};
+                end else
+                    state <= 3'h0;
+            end
+            3'h3: begin // address channel (prefetch next line)
                 if(icache_m_axi_arready && !queue_full)
                     state <= 3'h0;
             end

@@ -28,20 +28,21 @@ module CAM
     assign full = &valid_data;
     assign data_out = data[pop_index];
 
-    integer i;
+    genvar i;
+    generate for (i = 0; i < DEPTH; i = i + 1)
     always_ff @ (posedge clk) begin
         if (reset)
-            for (i = 0; i < DEPTH; i = i + 1)
-                valid_data[i] <= 1'b0;
-        else if (push) begin
-            assert(!valid_data[push_index]);
-            valid_data[push_index] <= 1'b1;
-            data[push_index] <= data_in;
-        end else if (pop) begin
-            assert(valid_data[pop_index]);
-            valid_data[pop_index] <= 1'b0;
+            valid_data[i] <= 1'b0;
+        else if (pop && pop_index == i) begin
+            assert(valid_data[i]);
+            valid_data[i] <= 1'b0;
+        end else if (push && push_index == i) begin
+            assert(!valid_data[i]);
+            valid_data[i] <= 1'b1;
+            data[i] <= data_in;
         end
     end
+    endgenerate
 
     // CAM logic
     integer j;
